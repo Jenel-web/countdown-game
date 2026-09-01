@@ -8,6 +8,14 @@ import { generateTilePool, generateTarget, applyOp, closestValue, Tile, Step } f
 
 type Phase = 'IDLE' | 'SELECTING' | 'REVEALING' | 'PREPARING' | 'PLAYING' | 'DONE';
 
+interface HistorySnapshot {
+  availableTiles: Tile[];
+  poolTiles: Tile[];
+  workingHistory: Step[];
+  activeOperator: '+' | '−' | '×' | '÷' | null;
+  activeTile: Tile | null;
+}
+
 const PREP_SECONDS = 5;
 const GAME_SECONDS = 30;
 
@@ -28,6 +36,7 @@ function GameBoard() {
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [selectedOp, setSelectedOp] = useState<'+' | '−' | '×' | '÷' | null>(null);
   const [steps, setSteps] = useState<Step[]>([]);
+  const [history, setHistory] = useState<HistorySnapshot[]>([]);
   const [revealedCount, setRevealedCount] = useState(0);
   const [prepCountdown, setPrepCountdown] = useState(PREP_SECONDS);
   const [gameTime, setGameTime] = useState(GAME_SECONDS);
@@ -52,10 +61,22 @@ function GameBoard() {
   // PREPARING: 5-second countdown
   useEffect(() => {
     if (phase !== 'PREPARING') return;
-    if (prepCountdown <= 0) { setGameTime(GAME_SECONDS); setPhase('PLAYING'); return; }
+    if (prepCountdown <= 0) {
+      setGameTime(GAME_SECONDS);
+      setPhase('PLAYING');
+      const initialSnapshot: HistorySnapshot = {
+        availableTiles: tiles,
+        poolTiles: [],
+        workingHistory: [],
+        activeOperator: null,
+        activeTile: null
+      };
+      setHistory([initialSnapshot]);
+      return;
+    }
     const t = setTimeout(() => setPrepCountdown(c => c - 1), 1000);
     return () => clearTimeout(t);
-  }, [phase, prepCountdown]);
+  }, [phase, prepCountdown, tiles]);
 
   // PLAYING: game clock
   useEffect(() => {
@@ -65,6 +86,43 @@ function GameBoard() {
     return () => clearTimeout(t);
   }, [phase, gameTime, showNote]);
 
+  /**
+   * Pushes a new snapshot of the board state onto the history stack.
+   *
+   * @param availableTiles - The list of initial tiles and their states.
+   * @param poolTiles - The list of generated pool tiles.
+   * @param workingHistory - The math steps performed so far.
+   * @param activeOperator - The currently selected operator, if any.
+   * @param activeTile - The currently selected tile, if any.
+   * @returns void
+   * @description Appends a new board state snapshot to the history stack to allow step-by-step undoing.
+   */
+  function pushStateToHistory(
+    availableTiles: Tile[],
+    poolTiles: Tile[],
+    workingHistory: Step[],
+    activeOperator: '+' | '−' | '×' | '÷' | null,
+    activeTile: Tile | null
+  ) {
+    setHistory(prev => [
+      ...prev,
+      {
+        availableTiles,
+        poolTiles,
+        workingHistory,
+        activeOperator,
+        activeTile,
+      },
+    ]);
+  }
+
+  /**
+   * Starts a new game flow with a specific number of large pool tiles.
+   *
+   * @param count - Number of large tiles to select (0-4), or 'random'.
+   * @returns void
+   * @description Resets game states, generates target and tiles, and transitions to the REVEALING phase.
+   */
   function startWithLarge(count: number | 'random') {
     const newTiles = generateTilePool(count);
     const newTarget = generateTarget();
@@ -75,53 +133,143 @@ function GameBoard() {
     setSelectedOp(null);
     setSteps([]);
     setRevealedCount(0);
+    setHistory([]);
     setPhase('REVEALING');
   }
 
+  /**
+   * Handles when a tile is clicked, performing selection, deselection, or equation execution.
+   *
+   * @param tile - The target tile data that was clicked.
+   * @returns void
+   * @description Manages selection state and triggers arithmetic calculations when two tiles and an operator are selected, saving results to history.
+   */
   function handleTileClick(tile: Tile) {
     if (phase !== 'PLAYING' || tile.used) return;
     if (!selectedTile) {
-      setSelectedTile(tile);
-      updateSel(tile, true);
+      const nextTile = { ...tile, selected: true };
+      const nextTiles = tiles.map(t => t.id === tile.id ? nextTile : t);
+      const nextPool = poolTiles.map(t => t.id === tile.id ? nextTile : t);
+      setSelectedTile(nextTile);
+      if (tile.isGenerated) setPoolTiles(nextPool); else setTiles(nextTiles);
+      pushStateToHistory(nextTiles, nextPool, steps, selectedOp, nextTile);
       return;
     }
-    if (selectedTile.id === tile.id) { setSelectedTile(null); updateSel(tile, false); return; }
-    if (!selectedOp) { updateSel(selectedTile, false); setSelectedTile(tile); updateSel(tile, true); return; }
+    if (selectedTile.id === tile.id) {
+      const nextTile = { ...tile, selected: false };
+      const nextTiles = tiles.map(t => t.id === tile.id ? nextTile : t);
+      const nextPool = poolTiles.map(t => t.id === tile.id ? nextTile : t);
+      setSelectedTile(null);
+      if (tile.isGenerated) setPoolTiles(nextPool); else setTiles(nextTiles);
+      pushStateToHistory(nextTiles, nextPool, steps, selectedOp, null);
+      return;
+    }
+    if (!selectedOp) {
+      const prevTile = { ...selectedTile, selected: false };
+      let nextTiles = tiles.map(t => t.id === selectedTile.id ? prevTile : t);
+      let nextPool = poolTiles.map(t => t.id === selectedTile.id ? prevTile : t);
+
+      const nextTile = { ...tile, selected: true };
+      nextTiles = nextTiles.map(t => t.id === tile.id ? nextTile : t);
+      nextPool = nextPool.map(t => t.id === tile.id ? nextTile : t);
+
+      setSelectedTile(nextTile);
+      setTiles(nextTiles);
+      setPoolTiles(nextPool);
+      pushStateToHistory(nextTiles, nextPool, steps, selectedOp, nextTile);
+      return;
+    }
 
     const result = applyOp(selectedTile.value, selectedOp, tile.value);
     if (result === null) { showNote('Invalid operation!', 'error'); return; }
 
-    setSteps(p => [...p, { a: selectedTile.value, op: selectedOp, b: tile.value, result }]);
+    const nextStep: Step = { a: selectedTile.value, op: selectedOp, b: tile.value, result };
+    const nextSteps = [...steps, nextStep];
+
     const markUsed = (l: Tile[]) => l.map(t => t.id === selectedTile.id || t.id === tile.id ? { ...t, used: true, selected: false } : t);
-    setTiles(p => markUsed(p));
-    setPoolTiles(p => [...markUsed(p), { id: `p_${Date.now()}`, value: result, used: false, selected: false, isGenerated: true }]);
+    const nextTiles = markUsed(tiles);
+    const newGenTile: Tile = { id: `p_${Date.now()}`, value: result, used: false, selected: false, isGenerated: true };
+    const nextPool = [...markUsed(poolTiles), newGenTile];
+
+    setSteps(nextSteps);
+    setTiles(nextTiles);
+    setPoolTiles(nextPool);
     setSelectedTile(null);
     setSelectedOp(null);
+
+    pushStateToHistory(nextTiles, nextPool, nextSteps, null, null);
     if (result === target) showNote('🎯 Exact match!', 'success');
   }
 
+  /**
+   * Helper function to update selection state of a tile inside the components.
+   *
+   * @param tile - The tile whose selection is being updated.
+   * @param sel - The next selection state boolean.
+   * @returns void
+   * @description Updates the target tile status to selected or deselected in either initial or pool state arrays.
+   */
   function updateSel(tile: Tile, sel: boolean) {
     if (tile.isGenerated) setPoolTiles(p => p.map(t => t.id === tile.id ? { ...t, selected: sel } : t));
     else setTiles(p => p.map(t => t.id === tile.id ? { ...t, selected: sel } : t));
   }
 
+  /**
+   * Handles user selection of an operator during active gameplay.
+   *
+   * @param op - The operator string ('+', '−', '×', '÷') selected by the user.
+   * @returns void
+   * @description Sets the active operator and pushes the updated board snapshot onto the history stack.
+   */
   function handleOp(op: '+' | '−' | '×' | '÷') {
     if (phase !== 'PLAYING' || !selectedTile) return;
-    setSelectedOp(prev => prev === op ? null : op);
+    const nextOp = selectedOp === op ? null : op;
+    setSelectedOp(nextOp);
+    pushStateToHistory(tiles, poolTiles, steps, nextOp, selectedTile);
   }
 
+  /**
+   * Reverts the game board to the immediate previous state by popping the latest snapshot.
+   *
+   * @returns void
+   * @description Pops the top state from the history stack and restores the prior snapshot's tiles, steps, active tile, and operator.
+   */
   function handleUndo() {
-    if (!steps.length) return;
-    const last = steps[steps.length - 1];
-    setPoolTiles(p => {
-      const without = p.slice(0, -1);
-      return without.map(t => t.used && (t.value === last.a || t.value === last.b) ? { ...t, used: false, selected: false } : t);
-    });
-    setTiles(p => p.map(t => t.used && (t.value === last.a || t.value === last.b) ? { ...t, used: false, selected: false } : t));
-    setSteps(p => p.slice(0, -1));
-    setSelectedTile(null); setSelectedOp(null);
+    if (history.length <= 1) return;
+    const newHistory = history.slice(0, -1);
+    const prevState = newHistory[newHistory.length - 1];
+
+    setTiles(prevState.availableTiles);
+    setPoolTiles(prevState.poolTiles);
+    setSteps(prevState.workingHistory);
+    setSelectedOp(prevState.activeOperator);
+    setSelectedTile(prevState.activeTile);
+    setHistory(newHistory);
   }
 
+  /**
+   * Reverts the math board back to the initial state (Step 0) immediately after preparation.
+   *
+   * @returns void
+   * @description Restores original tiles, clears intermediate pool tiles, working history, and active selections, keeping the game timer running.
+   */
+  function handleClear() {
+    if (history.length === 0) return;
+    const step0 = history[0];
+    setTiles(step0.availableTiles);
+    setPoolTiles(step0.poolTiles);
+    setSteps(step0.workingHistory);
+    setSelectedTile(step0.activeTile);
+    setSelectedOp(step0.activeOperator);
+    setHistory([step0]);
+  }
+
+  /**
+   * Submits the current closest calculation result to complete the game.
+   *
+   * @returns void
+   * @description Finds the closest value to the target in the remaining tiles and transitions phase to DONE.
+   */
   function handleSubmit() {
     const all = [...tiles, ...poolTiles];
     const { value, diff } = closestValue(all, target);
@@ -131,7 +279,6 @@ function GameBoard() {
 
   const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
   const timerPct = (gameTime / GAME_SECONDS) * 100;
-  const visibleTiles = tiles.slice(0, revealedCount);
 
   return (
     <div className="bg-background text-on-background min-h-screen flex flex-col font-body-md">
@@ -306,10 +453,16 @@ function GameBoard() {
 
           {/* Action row */}
           <div className="flex gap-3">
-            <button onClick={handleUndo} disabled={phase !== 'PLAYING' || !steps.length}
-              className="flex-1 py-3 rounded-xl border border-outline-variant text-on-surface hover:bg-surface-variant transition-colors font-bold text-sm uppercase tracking-wider flex justify-center items-center gap-2 disabled:opacity-30">
+            <button onClick={handleUndo} disabled={phase !== 'PLAYING' || history.length <= 1}
+              className="flex-1 py-3 rounded-xl border border-outline-variant text-on-surface hover:bg-surface-variant transition-colors font-bold text-sm uppercase tracking-wider flex justify-center items-center gap-2 disabled:opacity-40 disabled:pointer-events-none">
               <span className="material-symbols-outlined text-[18px]">undo</span> Undo
             </button>
+            {phase === 'PLAYING' && (
+              <button onClick={handleClear}
+                className="flex-1 py-3 rounded-xl border border-outline-variant text-on-surface hover:bg-error-container hover:text-on-error-container hover:border-error transition-colors font-bold text-sm uppercase tracking-wider flex justify-center items-center gap-2">
+                <span className="material-symbols-outlined text-[18px]">restart_alt</span> Clear
+              </button>
+            )}
             {phase === 'IDLE' || phase === 'DONE' ? (
               <button onClick={() => setPhase('SELECTING')}
                 className="flex-[3] py-3 rounded-xl bg-primary-container text-on-primary-container hover:bg-primary transition-all font-bold text-sm uppercase tracking-wider neon-glow flex justify-center items-center gap-2">
@@ -318,7 +471,7 @@ function GameBoard() {
               </button>
             ) : (
               <button onClick={handleSubmit} disabled={phase !== 'PLAYING'}
-                className="flex-[3] py-3 rounded-xl bg-primary-container text-on-primary-container hover:bg-primary transition-all font-bold text-sm uppercase tracking-wider neon-glow flex justify-center items-center gap-2 disabled:opacity-40">
+                className="flex-[2] py-3 rounded-xl bg-primary-container text-on-primary-container hover:bg-primary transition-all font-bold text-sm uppercase tracking-wider neon-glow flex justify-center items-center gap-2 disabled:opacity-40">
                 Submit <span className="material-symbols-outlined text-[18px]">check</span>
               </button>
             )}
