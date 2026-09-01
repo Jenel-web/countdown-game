@@ -128,3 +128,66 @@ export function closestValue(
   );
   return { value, diff: Math.abs(value - target) };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Solvability Engine
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SolveResult {
+  solvable: boolean;
+  bestDiff: number;
+  bestExpression?: string;
+}
+
+/**
+ * Recursively searches every ordering/combination of the given numbers
+ * to determine whether the exact target is reachable, and if not, the
+ * closest reachable value.
+ */
+export function checkSolvability(values: number[], target: number): SolveResult {
+  let bestDiff = Infinity;
+  let bestExpression: string | undefined;
+
+  type Candidate = { value: number; expr: string };
+
+  function search(numbers: Candidate[]) {
+    for (const n of numbers) {
+      const diff = Math.abs(n.value - target);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestExpression = n.expr;
+      }
+    }
+    if (bestDiff === 0) return;
+
+    for (let i = 0; i < numbers.length; i++) {
+      for (let j = 0; j < numbers.length; j++) {
+        if (i === j) continue;
+        const a = numbers[i];
+        const b = numbers[j];
+        const rest = numbers.filter((_, idx) => idx !== i && idx !== j);
+        const candidates: Candidate[] = [];
+
+        candidates.push({ value: a.value + b.value, expr: `(${a.expr}+${b.expr})` });
+        if (a.value > b.value) {
+          candidates.push({ value: a.value - b.value, expr: `(${a.expr}−${b.expr})` });
+        }
+        candidates.push({ value: a.value * b.value, expr: `(${a.expr}×${b.expr})` });
+        if (b.value !== 0 && a.value % b.value === 0) {
+          candidates.push({ value: a.value / b.value, expr: `(${a.expr}÷${b.expr})` });
+        }
+
+        for (const c of candidates) {
+          if (bestDiff === 0) return;
+          search([...rest, c]);
+        }
+      }
+    }
+  }
+
+  search(values.map((v) => ({ value: v, expr: String(v) })));
+  return { solvable: bestDiff === 0, bestDiff, bestExpression };
+}
+
+
+console.log('TEST checkSolvability:', checkSolvability([25, 50, 75, 100, 3, 6], 952));
