@@ -191,3 +191,135 @@ export function checkSolvability(values: number[], target: number): SolveResult 
 
 
 console.log('TEST checkSolvability:', checkSolvability([25, 50, 75, 100, 3, 6], 952));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Round Scoring Engine
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Internal scale: 100 = 1.0 point. Keeps all math in integers. */
+export const POINTS_SCALE = 100;
+
+export interface PlayerSubmission {
+  result: number | null; // final value reached; null = did not submit (timeout)
+  timeMs: number | null;  // ms from round start to submission; null if no submission
+}
+
+export type RoundOutcome = 'win' | 'loss' | 'draw';
+
+export interface PlayerRoundResult {
+  points: number;       // decimal, e.g. 0.7 — already divided by POINTS_SCALE
+  pointsRaw: number;     // integer, e.g. 70 — store THIS in the database
+  outcome: RoundOutcome;
+}
+
+export interface RoundScoreResult {
+  player1: PlayerRoundResult;
+  player2: PlayerRoundResult;
+  solvable: boolean; // safe to reveal in the post-round results screen
+}
+
+function toResult(pointsRaw: number, outcome: RoundOutcome): PlayerRoundResult {
+  return { points: pointsRaw / POINTS_SCALE, pointsRaw, outcome };
+}
+
+/**
+ * Scores a single round given both players' submissions.
+ * target/solvable come from the same generateTarget()/checkSolvability()
+ * call used to set up the round.
+ */
+export function scoreRound(
+  target: number,
+  solvable: boolean,
+  p1: PlayerSubmission,
+  p2: PlayerSubmission
+): RoundScoreResult {
+  // Both players failed to submit — draw, no points, no W/L change.
+  if (p1.result === null && p2.result === null) {
+    return {
+      player1: toResult(0, 'draw'),
+      player2: toResult(0, 'draw'),
+      solvable,
+    };
+  }
+
+  // Exactly one player timed out — the other gets an automatic max win.
+  if (p1.result === null) {
+    return { player1: toResult(0, 'loss'), player2: toResult(100, 'win'), solvable };
+  }
+  if (p2.result === null) {
+    return { player1: toResult(100, 'win'), player2: toResult(0, 'loss'), solvable };
+  }
+
+  const d1 = Math.abs(p1.result - target);
+  const d2 = Math.abs(p2.result - target);
+
+  // Determine the winner: closer distance wins; tie on distance -> faster time; tie on both -> draw.
+  let winner: 1 | 2 | 'draw';
+  if (d1 < d2) winner = 1;
+  else if (d2 < d1) winner = 2;
+  else if (p1.timeMs! < p2.timeMs!) winner = 1;
+  else if (p2.timeMs! < p1.timeMs!) winner = 2;
+  else winner = 'draw';
+
+  if (winner === 'draw') {
+    const pts = solvable ? 35 : 50;
+    return { player1: toResult(pts, 'draw'), player2: toResult(pts, 'draw'), solvable };
+  }
+
+  const winnerDiff = winner === 1 ? d1 : d2;
+  const loserDiff = winner === 1 ? d2 : d1;
+
+  let winnerPts: number;
+  let loserPts: number;
+
+  if (winnerDiff === 0) {
+    // Exact match.
+    winnerPts = 100;
+    loserPts = loserDiff <= 3 ? 35 : 0;
+  } else if (solvable) {
+    // Target was solvable, but the winner didn't find the exact answer.
+    winnerPts = 70;
+    loserPts = loserDiff <= 3 ? 35 : 0;
+  } else {
+    // Target was unsolvable — weighted by how close the winner got.
+    winnerPts = winnerDiff <= 3 ? 100 : winnerDiff <= 7 ? 80 : 50;
+    loserPts = loserDiff <= 3 ? 40 : 0;
+  }
+
+  const p1Pts = winner === 1 ? winnerPts : loserPts;
+  const p2Pts = winner === 2 ? winnerPts : loserPts;
+
+  return {
+    player1: toResult(p1Pts, winner === 1 ? 'win' : 'loss'),
+    player2: toResult(p2Pts, winner === 2 ? 'win' : 'loss'),
+    solvable,
+  };
+}
+
+/**
+ * Checks whether a match has been won. Pass cumulative RAW (integer) totals.
+ * Returns 1, 2, or null if nobody has reached 5 points yet.
+ */
+export function checkMatchOver(p1TotalRaw: number, p2TotalRaw: number): 1 | 2 | null {
+  const MATCH_TARGET_RAW = 5 * POINTS_SCALE; // 500
+  if (p1TotalRaw >= MATCH_TARGET_RAW && p1TotalRaw > p2TotalRaw) return 1;
+  if (p2TotalRaw >= MATCH_TARGET_RAW && p2TotalRaw > p1TotalRaw) return 2;
+  if (p1TotalRaw >= MATCH_TARGET_RAW && p2TotalRaw >= MATCH_TARGET_RAW) {
+    return p1TotalRaw >= p2TotalRaw ? 1 : 2; // both crossed in the same round — higher total wins
+  }
+  return null;
+}
+
+console.log('TEST scoreRound (exact vs miss, solvable):', scoreRound(
+  500, true,
+  { result: 500, timeMs: 12000 },  // player 1: exact
+  { result: 480, timeMs: 15000 }   // player 2: off by 20
+));
+// Expect: player1 { points: 1, outcome: 'win' }, player2 { points: 0, outcome: 'loss' }
+
+console.log('TEST scoreRound (unsolvable, both timeout):', scoreRound(
+  500, false,
+  { result: null, timeMs: null },
+  { result: null, timeMs: null }
+));
+// Expect: both { points: 0, outcome: 'draw' }
