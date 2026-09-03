@@ -1,8 +1,8 @@
-// File: C:\Users\Administrator\Downloads\LearningOOP\Countdown Game\app\game\page.tsx
-import * as entry from '../../../../app/game/page.js'
+// File: C:\Users\Administrator\Downloads\LearningOOP\Countdown Game\app\page.tsx
+import * as entry from '../../../app/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
-type TEntry = typeof import('../../../../app/game/page.js')
+type TEntry = typeof import('../../../app/page.js')
 
 // Check that the entry is a valid entry
 checkFields<Diff<{
