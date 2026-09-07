@@ -1,12 +1,20 @@
 'use client';
-
-import { useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+
+import { createBrowserClient } from '@supabase/ssr';
+import { useState } from 'react';
+
+// Create the browser client directly here
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 export default function RegisterPage() {
   const router = useRouter();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreeTerms, setAgreeTerms] = useState(false);
@@ -26,11 +34,11 @@ export default function RegisterPage() {
 
   const strength = getStrength(password);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!username || !password || !confirmPassword) {
+    if (!email || !password || !confirmPassword) {
       setError('Please fill in all fields.');
       return;
     }
@@ -44,13 +52,35 @@ export default function RegisterPage() {
       setError('You must acknowledge the Terms of Engagement.');
       return;
     }
-
-    setLoading(true);
     // Simulating quick authorization
-    setTimeout(() => {
+    setLoading(true);
+
+    const { data, error: authError } = await supabase.auth.signUp({
+      email: email, // same email/username decision as login — treat this field as email for now
+      password,
+    });
+
+    if (authError) {
       setLoading(false);
-      router.push('/lobby');
-    }, 800);
+      setError(authError.message);
+      return;
+    }
+
+    // Create the matching profile row with their chosen display name
+    if (data.user) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({ id: data.user.id, email });
+
+      if (profileError) {
+        setLoading(false);
+        setError(profileError.message);
+        return;
+      }
+    }
+
+    setLoading(false);
+    router.push('/lobby');
   };
 
   return (
@@ -82,7 +112,7 @@ export default function RegisterPage() {
         <div className="glass-card rounded-xl p-8 md:p-12 w-full max-w-md shadow-2xl relative overflow-hidden animate-[fadeIn_0.5s_ease-out]">
           {/* Decorative accent top line */}
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-secondary-container via-primary-container to-secondary-container"></div>
-          
+
           <div className="text-center mb-10">
             <h1 className="font-headline-lg text-headline-lg text-on-surface font-semibold mb-2">Initialize Profile</h1>
             <p className="font-body-sm text-body-sm text-on-surface-variant">Enter your credentials to join the arena.</p>
@@ -104,8 +134,8 @@ export default function RegisterPage() {
                   id="username"
                   type="text"
                   required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter username"
                   className="w-full bg-[#0A192F] border border-outline-variant rounded py-3 pl-10 pr-4 text-on-surface font-mono-metric text-mono-metric focus:outline-none focus:ring-0 input-glow transition-all"
                 />
@@ -132,17 +162,16 @@ export default function RegisterPage() {
                 {[1, 2, 3, 4].map((i) => (
                   <div
                     key={i}
-                    className={`flex-1 rounded-full transition-all duration-300 ${
-                      i <= strength
-                        ? strength === 1
-                          ? 'bg-error-container'
-                          : strength === 2
+                    className={`flex-1 rounded-full transition-all duration-300 ${i <= strength
+                      ? strength === 1
+                        ? 'bg-error-container'
+                        : strength === 2
                           ? 'bg-yellow-500'
                           : strength === 3
-                          ? 'bg-primary'
-                          : 'bg-primary-container shadow-[0_0_8px_rgba(0,229,255,0.8)]'
-                        : 'bg-surface-bright'
-                    }`}
+                            ? 'bg-primary'
+                            : 'bg-primary-container shadow-[0_0_8px_rgba(0,229,255,0.8)]'
+                      : 'bg-surface-bright'
+                      }`}
                   ></div>
                 ))}
               </div>
@@ -222,3 +251,6 @@ export default function RegisterPage() {
     </div>
   );
 }
+
+import * as clientModule from '@/lib/supabase/client';
+console.log('FULL MODULE CONTENTS:', clientModule);

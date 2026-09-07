@@ -4,6 +4,17 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Navbar from '@/components/Navbar';
 import { generateTilePool, generateTarget, applyOp, closestValue, Tile, Step } from '@/lib/gameEngine';
+import { useRouter } from 'next/navigation';
+import createClient from '@/lib/supabase/client';
+// inside the component, near your other useState/useEffect hooks:
+const router = useRouter();
+
+useEffect(() => {
+  const supabase = createClient();
+  supabase.auth.getUser().then(({ data: { user } }) => {
+    if (!user) router.push('/login');
+  });
+}, [router]);
 
 type Phase = 'IDLE' | 'SELECTING' | 'REVEALING' | 'PREPARING' | 'PLAYING' | 'DONE';
 type TimerMode = '30s' | '60s' | 'stopwatch' | 'untimed';
@@ -341,11 +352,10 @@ export default function TrainingPage() {
       <AnimatePresence>
         {notification && (
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className={`fixed top-20 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg font-bold text-sm tracking-wider shadow-lg ${
-              notification.type === 'success' ? 'bg-primary-container text-on-primary-container border border-primary-fixed-dim shadow-[0_0_15px_rgba(0,240,255,0.4)]'
-              : notification.type === 'info' ? 'bg-surface-container-high text-on-surface border border-outline-variant'
-              : 'bg-error-container text-on-error-container border border-error'
-            }`}>{notification.msg}</motion.div>
+            className={`fixed top-20 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg font-bold text-sm tracking-wider shadow-lg ${notification.type === 'success' ? 'bg-primary-container text-on-primary-container border border-primary-fixed-dim shadow-[0_0_15px_rgba(0,240,255,0.4)]'
+                : notification.type === 'info' ? 'bg-surface-container-high text-on-surface border border-outline-variant'
+                  : 'bg-error-container text-on-error-container border border-error'
+              }`}>{notification.msg}</motion.div>
         )}
       </AnimatePresence>
 
@@ -361,11 +371,10 @@ export default function TrainingPage() {
               <div className="grid grid-cols-3 gap-3">
                 {([0, 1, 2, 3, 4, 'random'] as (number | 'random')[]).map((v) => (
                   <button key={String(v)} onClick={() => startWithLarge(v)}
-                    className={`py-4 rounded-xl font-bold text-lg border transition-all hover:scale-105 active:scale-95 ${
-                      v === 'random'
+                    className={`py-4 rounded-xl font-bold text-lg border transition-all hover:scale-105 active:scale-95 ${v === 'random'
                         ? 'col-span-3 bg-primary-container text-on-primary-container border-primary-fixed-dim shadow-[0_0_12px_rgba(0,240,255,0.3)] neon-glow'
                         : 'bg-surface-container-high border-outline-variant/50 text-on-surface hover:border-primary hover:shadow-[0_0_10px_rgba(0,240,255,0.3)]'
-                    }`}>
+                      }`}>
                     {v === 'random' ? '🎲 Random' : `${v} Large`}
                   </button>
                 ))}
@@ -424,10 +433,9 @@ export default function TrainingPage() {
             {(['30s', '60s', 'stopwatch', 'untimed'] as TimerMode[]).map(mode => (
               <button key={mode} onClick={() => { setTimerMode(mode); }}
                 disabled={phase === 'PLAYING' || phase === 'PREPARING' || phase === 'REVEALING'}
-                className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all disabled:opacity-50 ${
-                  timerMode === mode ? 'bg-primary-container text-on-primary-container shadow-[0_0_10px_rgba(0,240,255,0.4)]'
-                  : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/40'
-                }`}>
+                className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all disabled:opacity-50 ${timerMode === mode ? 'bg-primary-container text-on-primary-container shadow-[0_0_10px_rgba(0,240,255,0.4)]'
+                    : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/40'
+                  }`}>
                 {mode === 'stopwatch' ? 'Stopwatch' : mode === 'untimed' ? 'Untimed' : mode}
               </button>
             ))}
@@ -448,9 +456,8 @@ export default function TrainingPage() {
               {phase === 'PLAYING' || phase === 'DONE' ? displayTime : '--:--'}
             </span>
           </div>
-          <div className={`text-7xl font-black text-primary-container tracking-tighter mb-4 transition-all duration-500 ${
-            phase === 'IDLE' || phase === 'SELECTING' ? 'blur-2xl opacity-0' : phase === 'REVEALING' || phase === 'PREPARING' ? 'blur-xl' : ''
-          }`} style={{ textShadow: phase === 'PLAYING' ? '0 0 30px #00F0FF' : undefined }}>
+          <div className={`text-7xl font-black text-primary-container tracking-tighter mb-4 transition-all duration-500 ${phase === 'IDLE' || phase === 'SELECTING' ? 'blur-2xl opacity-0' : phase === 'REVEALING' || phase === 'PREPARING' ? 'blur-xl' : ''
+            }`} style={{ textShadow: phase === 'PLAYING' ? '0 0 30px #00F0FF' : undefined }}>
             {target || '???'}
           </div>
           <div className="w-full h-1 bg-surface-container-highest rounded-full overflow-hidden">
@@ -498,11 +505,10 @@ export default function TrainingPage() {
           <div className="flex justify-center gap-4">
             {(['+', '−', '×', '÷'] as const).map(op => (
               <button key={op} onClick={() => handleOp(op)} disabled={phase !== 'PLAYING' || !selectedTile}
-                className={`w-14 h-14 rounded-xl border font-bold text-xl transition-all disabled:opacity-30 disabled:pointer-events-none ${
-                  selectedOp === op
+                className={`w-14 h-14 rounded-xl border font-bold text-xl transition-all disabled:opacity-30 disabled:pointer-events-none ${selectedOp === op
                     ? 'bg-primary-container border-primary-fixed-dim text-on-primary-container shadow-[0_0_14px_rgba(0,240,255,0.5)]'
                     : 'bg-surface-variant/30 border-outline-variant hover:border-primary-fixed-dim hover:text-primary-fixed-dim'
-                }`}>{op}</button>
+                  }`}>{op}</button>
             ))}
           </div>
 
@@ -510,21 +516,20 @@ export default function TrainingPage() {
           <div className="grid grid-cols-6 gap-3">
             {phase === 'IDLE' || phase === 'SELECTING'
               ? Array(6).fill(null).map((_, i) => (
-                  <div key={i} className="aspect-square rounded-xl bg-surface-container-high border border-outline-variant/20 opacity-30" />
-                ))
+                <div key={i} className="aspect-square rounded-xl bg-surface-container-high border border-outline-variant/20 opacity-30" />
+              ))
               : tiles.map((tile, i) => {
-                  const visible = i < revealedCount || phase === 'PLAYING' || phase === 'DONE';
-                  const isSel = selectedTile?.id === tile.id;
-                  return (
-                    <motion.button key={tile.id} custom={i} variants={tileVariants} initial="hidden" animate={visible ? 'visible' : 'hidden'}
-                      onClick={() => handleTileClick(tile)} disabled={phase !== 'PLAYING' || tile.used}
-                      className={`aspect-square rounded-xl border font-bold text-lg flex items-center justify-center transition-all ${
-                        tile.used ? 'opacity-25 cursor-not-allowed bg-surface-container-lowest border-outline-variant/10'
+                const visible = i < revealedCount || phase === 'PLAYING' || phase === 'DONE';
+                const isSel = selectedTile?.id === tile.id;
+                return (
+                  <motion.button key={tile.id} custom={i} variants={tileVariants} initial="hidden" animate={visible ? 'visible' : 'hidden'}
+                    onClick={() => handleTileClick(tile)} disabled={phase !== 'PLAYING' || tile.used}
+                    className={`aspect-square rounded-xl border font-bold text-lg flex items-center justify-center transition-all ${tile.used ? 'opacity-25 cursor-not-allowed bg-surface-container-lowest border-outline-variant/10'
                         : isSel ? 'border-primary bg-surface-container-highest shadow-[0_0_14px_rgba(0,240,255,0.6)] text-primary scale-105'
-                        : 'bg-surface-container-high border-outline-variant/50 hover:border-primary hover:shadow-[0_0_8px_rgba(0,240,255,0.3)] hover:scale-105'
+                          : 'bg-surface-container-high border-outline-variant/50 hover:border-primary hover:shadow-[0_0_8px_rgba(0,240,255,0.3)] hover:scale-105'
                       }`}>{tile.value}</motion.button>
-                  );
-                })}
+                );
+              })}
           </div>
 
           {/* Pool */}
@@ -536,10 +541,9 @@ export default function TrainingPage() {
                 return (
                   <motion.button key={tile.id} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                     onClick={() => handleTileClick(tile)} disabled={phase !== 'PLAYING'}
-                    className={`px-5 py-2 rounded-xl border font-bold transition-all ${
-                      isSel ? 'border-primary bg-secondary-container/40 text-primary shadow-[0_0_14px_rgba(0,240,255,0.6)] scale-105'
-                      : 'border-secondary/40 bg-secondary-container/20 text-secondary hover:bg-secondary-container/40 hover:scale-105'
-                    }`}>{tile.value}</motion.button>
+                    className={`px-5 py-2 rounded-xl border font-bold transition-all ${isSel ? 'border-primary bg-secondary-container/40 text-primary shadow-[0_0_14px_rgba(0,240,255,0.6)] scale-105'
+                        : 'border-secondary/40 bg-secondary-container/20 text-secondary hover:bg-secondary-container/40 hover:scale-105'
+                      }`}>{tile.value}</motion.button>
                 );
               })}
             </div>
