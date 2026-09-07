@@ -617,6 +617,34 @@ body {
   }
 .btn-secondary:hover { background: rgba(49, 49, 192, 0.2); }
 /* Input field */
+.field{
+  width: 100%;
+  border-radius: 9999px;
+  --tw-bg-opacity: 1;
+  background-color: rgb(19 27 46 / var(--tw-bg-opacity, 1));
+  --tw-text-opacity: 1;
+  color: rgb(218 226 253 / var(--tw-text-opacity, 1));
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}
+.field::-moz-placeholder{
+  --tw-text-opacity: 1;
+  color: rgb(134 149 133 / var(--tw-text-opacity, 1));
+}
+.field::placeholder{
+  --tw-text-opacity: 1;
+  color: rgb(134 149 133 / var(--tw-text-opacity, 1));
+}
+.field {
+    border: 1.5px solid #3d4a3d;
+  }
+.field:focus {
+    border-color: #4be277;
+    box-shadow: 0 0 0 3px rgba(75, 226, 119, 0.15);
+  }
 .pointer-events-none{
   pointer-events: none;
 }
