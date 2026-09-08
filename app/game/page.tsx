@@ -4,9 +4,20 @@ import { useState, useEffect, useCallback, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
-import { generateTilePool, generateTarget, applyOp, closestValue, Tile, Step } from '@/lib/gameEngine';
-
+import { generateTilePool, generateTarget, applyOp, closestValue, checkSolvability, Tile, Step } from '@/lib/gameEngine';
 type Phase = 'IDLE' | 'SELECTING' | 'REVEALING' | 'PREPARING' | 'PLAYING' | 'DONE';
+
+import { createClient } from '@/lib/supabase/client';
+
+// inside the component, near your other useState/useEffect hooks:
+const router = useRouter();
+
+useEffect(() => {
+  const supabase = createClient();
+  supabase.auth.getUser().then(({ data: { user } }) => {
+    if (!user) router.push('/login');
+  });
+}, [router]);
 
 interface HistorySnapshot {
   availableTiles: Tile[];
@@ -32,6 +43,8 @@ function GameBoard() {
   const [phase, setPhase] = useState<Phase>('IDLE');
   const [target, setTarget] = useState(0);
   const [tiles, setTiles] = useState<Tile[]>([]);
+  const [solveInfo, setSolveInfo] = useState<{ solvable: boolean; bestExpression?: string } | null>(null);
+  //for the checkSolvability feature
   const [poolTiles, setPoolTiles] = useState<Tile[]>([]);
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
   const [selectedOp, setSelectedOp] = useState<'+' | '−' | '×' | '÷' | null>(null);
@@ -126,6 +139,8 @@ function GameBoard() {
   function startWithLarge(count: number | 'random') {
     const newTiles = generateTilePool(count);
     const newTarget = generateTarget();
+    const solve = checkSolvability(newTiles.map(t => t.value), newTarget);   // TAKES THE NUMBER OF THE TILES
+    setSolveInfo(solve);//USE THEM AS AN ARUGMENT FOR THE CHECKSOLVABILITY FUNCTION
     setTiles(newTiles);
     setTarget(newTarget);
     setPoolTiles([]);
@@ -288,11 +303,10 @@ function GameBoard() {
       <AnimatePresence>
         {notification && (
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className={`fixed top-20 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg font-bold text-sm tracking-wider shadow-lg ${
-              notification.type === 'success' ? 'bg-primary-container text-on-primary-container border border-primary-fixed-dim shadow-[0_0_15px_rgba(0,240,255,0.4)]'
+            className={`fixed top-20 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg font-bold text-sm tracking-wider shadow-lg ${notification.type === 'success' ? 'bg-primary-container text-on-primary-container border border-primary-fixed-dim shadow-[0_0_15px_rgba(0,240,255,0.4)]'
               : notification.type === 'info' ? 'bg-surface-container-high text-on-surface border border-outline-variant'
-              : 'bg-error-container text-on-error-container border border-error'
-            }`}>{notification.msg}</motion.div>
+                : 'bg-error-container text-on-error-container border border-error'
+              }`}>{notification.msg}</motion.div>
         )}
       </AnimatePresence>
 
@@ -308,11 +322,10 @@ function GameBoard() {
               <div className="grid grid-cols-3 gap-3">
                 {([0, 1, 2, 3, 4, 'random'] as (number | 'random')[]).map((v) => (
                   <button key={String(v)} onClick={() => startWithLarge(v)}
-                    className={`py-4 rounded-xl font-bold text-lg border transition-all hover:scale-105 active:scale-95 ${
-                      v === 'random'
-                        ? 'col-span-3 bg-primary-container text-on-primary-container border-primary-fixed-dim shadow-[0_0_12px_rgba(0,240,255,0.3)] neon-glow'
-                        : 'bg-surface-container-high border-outline-variant/50 text-on-surface hover:border-primary hover:shadow-[0_0_10px_rgba(0,240,255,0.3)]'
-                    }`}>
+                    className={`py-4 rounded-xl font-bold text-lg border transition-all hover:scale-105 active:scale-95 ${v === 'random'
+                      ? 'col-span-3 bg-primary-container text-on-primary-container border-primary-fixed-dim shadow-[0_0_12px_rgba(0,240,255,0.3)] neon-glow'
+                      : 'bg-surface-container-high border-outline-variant/50 text-on-surface hover:border-primary hover:shadow-[0_0_10px_rgba(0,240,255,0.3)]'
+                      }`}>
                     {v === 'random' ? '🎲 Random' : `${v} Large`}
                   </button>
                 ))}
@@ -402,11 +415,10 @@ function GameBoard() {
             {(['+', '−', '×', '÷'] as const).map(op => (
               <button key={op} onClick={() => handleOp(op)}
                 disabled={phase !== 'PLAYING' || !selectedTile}
-                className={`w-14 h-14 rounded-xl border font-bold text-xl transition-all disabled:opacity-30 disabled:pointer-events-none ${
-                  selectedOp === op
-                    ? 'bg-primary-container border-primary-fixed-dim text-on-primary-container shadow-[0_0_14px_rgba(0,240,255,0.5)]'
-                    : 'bg-surface-variant/30 border-outline-variant hover:border-primary-fixed-dim hover:text-primary-fixed-dim'
-                }`}>{op}</button>
+                className={`w-14 h-14 rounded-xl border font-bold text-xl transition-all disabled:opacity-30 disabled:pointer-events-none ${selectedOp === op
+                  ? 'bg-primary-container border-primary-fixed-dim text-on-primary-container shadow-[0_0_14px_rgba(0,240,255,0.5)]'
+                  : 'bg-surface-variant/30 border-outline-variant hover:border-primary-fixed-dim hover:text-primary-fixed-dim'
+                  }`}>{op}</button>
             ))}
           </div>
 
@@ -414,23 +426,22 @@ function GameBoard() {
           <div className="grid grid-cols-6 gap-3">
             {phase === 'IDLE' || phase === 'SELECTING'
               ? Array(6).fill(null).map((_, i) => (
-                  <div key={i} className="aspect-square rounded-xl bg-surface-container-high border border-outline-variant/20 opacity-30" />
-                ))
+                <div key={i} className="aspect-square rounded-xl bg-surface-container-high border border-outline-variant/20 opacity-30" />
+              ))
               : tiles.map((tile, i) => {
-                  const visible = i < revealedCount || phase === 'PLAYING' || phase === 'DONE';
-                  const isSel = selectedTile?.id === tile.id;
-                  return (
-                    <motion.button key={tile.id} custom={i} variants={tileVariants}
-                      initial="hidden" animate={visible ? 'visible' : 'hidden'}
-                      onClick={() => handleTileClick(tile)}
-                      disabled={phase !== 'PLAYING' || tile.used}
-                      className={`aspect-square rounded-xl border font-bold text-lg flex items-center justify-center transition-all ${
-                        tile.used ? 'opacity-25 cursor-not-allowed bg-surface-container-lowest border-outline-variant/10'
-                        : isSel ? 'border-primary bg-surface-container-highest shadow-[0_0_14px_rgba(0,240,255,0.6)] text-primary scale-105'
+                const visible = i < revealedCount || phase === 'PLAYING' || phase === 'DONE';
+                const isSel = selectedTile?.id === tile.id;
+                return (
+                  <motion.button key={tile.id} custom={i} variants={tileVariants}
+                    initial="hidden" animate={visible ? 'visible' : 'hidden'}
+                    onClick={() => handleTileClick(tile)}
+                    disabled={phase !== 'PLAYING' || tile.used}
+                    className={`aspect-square rounded-xl border font-bold text-lg flex items-center justify-center transition-all ${tile.used ? 'opacity-25 cursor-not-allowed bg-surface-container-lowest border-outline-variant/10'
+                      : isSel ? 'border-primary bg-surface-container-highest shadow-[0_0_14px_rgba(0,240,255,0.6)] text-primary scale-105'
                         : 'bg-surface-container-high border-outline-variant/50 hover:border-primary hover:shadow-[0_0_8px_rgba(0,240,255,0.3)] hover:scale-105'
                       }`}>{tile.value}</motion.button>
-                  );
-                })}
+                );
+              })}
           </div>
 
           {/* Pool tiles */}
@@ -442,10 +453,9 @@ function GameBoard() {
                 return (
                   <motion.button key={tile.id} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                     onClick={() => handleTileClick(tile)} disabled={phase !== 'PLAYING'}
-                    className={`px-5 py-2 rounded-xl border font-bold transition-all ${
-                      isSel ? 'border-primary bg-secondary-container/40 text-primary shadow-[0_0_14px_rgba(0,240,255,0.6)] scale-105'
+                    className={`px-5 py-2 rounded-xl border font-bold transition-all ${isSel ? 'border-primary bg-secondary-container/40 text-primary shadow-[0_0_14px_rgba(0,240,255,0.6)] scale-105'
                       : 'border-secondary/40 bg-secondary-container/20 text-secondary hover:bg-secondary-container/40 hover:scale-105'
-                    }`}>{tile.value}</motion.button>
+                      }`}>{tile.value}</motion.button>
                 );
               })}
             </div>

@@ -1,6 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
-
+const PROTECTED_PATHS = ['/lobby', '/game', '/training', '/history'];
 export default async function middleware(request: NextRequest) {
     let response = NextResponse.next({ request });
 
@@ -23,7 +23,16 @@ export default async function middleware(request: NextRequest) {
         }
     );
 
-    await supabase.auth.getUser();
+
+    const { data: { user } } = await supabase.auth.getUser();   // ← capture the user this time
+
+    const isProtected = PROTECTED_PATHS.some((path) =>
+        request.nextUrl.pathname.startsWith(path)
+    );
+
+    if (isProtected && !user) {
+        return NextResponse.redirect(new URL('/login', request.url));
+    }
 
     return response;
 }
