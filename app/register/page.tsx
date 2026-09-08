@@ -70,7 +70,7 @@ export default function RegisterPage() {
     if (data.user) {
       const { error: profileError } = await supabase
         .from('profiles')
-        .insert({ id: data.user.id, email });
+        .insert({ id: data.user.id, email: email });
 
       if (profileError) {
         setLoading(false);
