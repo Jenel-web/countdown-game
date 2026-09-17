@@ -5,16 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Navbar from '@/components/Navbar';
 import { generateTilePool, generateTarget, applyOp, closestValue, Tile, Step } from '@/lib/gameEngine';
 import { useRouter } from 'next/navigation';
-import createClient from '@/lib/supabase/client';
-// inside the component, near your other useState/useEffect hooks:
-const router = useRouter();
-
-useEffect(() => {
-  const supabase = createClient();
-  supabase.auth.getUser().then(({ data: { user } }) => {
-    if (!user) router.push('/login');
-  });
-}, [router]);
+import { createClient } from '@/lib/supabase/client';
 
 type Phase = 'IDLE' | 'SELECTING' | 'REVEALING' | 'PREPARING' | 'PLAYING' | 'DONE';
 type TimerMode = '30s' | '60s' | 'stopwatch' | 'untimed';
@@ -38,6 +29,15 @@ const tileVariants = {
 };
 
 export default function TrainingPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) router.push('/login');
+    });
+  }, [router]);
+
   const [phase, setPhase] = useState<Phase>('IDLE');
   const [timerMode, setTimerMode] = useState<TimerMode>('60s');
   const [target, setTarget] = useState(0);
