@@ -3,29 +3,36 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase/client';
+
+const supabase = createClient();
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!username || !password) {
+    if (!email || !password) {
       setError('Please enter your Operative ID and password.');
       return;
     }
 
     setLoading(true);
-    // Simulating quick authorization
-    setTimeout(() => {
-      setLoading(false);
-      router.push('/lobby');
-    }, 800);
+    // const supabase = createClient();
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+
+    if (authError) {
+      setError(authError.message);
+      return;
+    }
+    router.push('/lobby');
   };
 
   return (
@@ -40,7 +47,7 @@ export default function LoginPage() {
 
       {/* Login Container (Float Glassmorphism) */}
       <main className="w-full max-w-md mx-4 p-10 rounded-xl bg-surface-container-low/40 backdrop-blur-[20px] border border-primary-container/15 relative z-10 flex flex-col gap-10 shadow-[0_0_60px_rgba(0,229,255,0.03)] animate-[fadeIn_0.5s_ease-out]">
-        
+
         {/* Header Section */}
         <header className="text-center flex flex-col gap-2 items-center">
           {/* Brand Mark */}
@@ -72,8 +79,8 @@ export default function LoginPage() {
                 id="username"
                 type="text"
                 autoComplete="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="Enter Operative ID"
                 spellCheck="false"
                 className="w-full bg-surface-container text-on-surface pl-12 pr-4 py-4 rounded-lg border border-outline-variant focus:border-primary-container focus:ring-1 focus:ring-primary-container outline-none transition-all duration-300 placeholder:text-on-surface-variant/40 focus:shadow-[inset_0_0_12px_rgba(0,229,255,0.1)] font-mono-metric text-mono-metric"

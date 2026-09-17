@@ -9,16 +9,6 @@ type Phase = 'IDLE' | 'SELECTING' | 'REVEALING' | 'PREPARING' | 'PLAYING' | 'DON
 
 import { createClient } from '@/lib/supabase/client';
 
-// inside the component, near your other useState/useEffect hooks:
-const router = useRouter();
-
-useEffect(() => {
-  const supabase = createClient();
-  supabase.auth.getUser().then(({ data: { user } }) => {
-    if (!user) router.push('/login');
-  });
-}, [router]);
-
 interface HistorySnapshot {
   availableTiles: Tile[];
   poolTiles: Tile[];
@@ -34,12 +24,20 @@ const tileVariants = {
   hidden: { opacity: 0, y: 40, scale: 0.8 },
   visible: (i: number) => ({
     opacity: 1, y: 0, scale: 1,
-    transition: { delay: i * 0.2, type: 'spring', stiffness: 260, damping: 20 },
+    transition: { delay: i * 0.2, type: 'spring' as const, stiffness: 260, damping: 20 },
   }),
 };
 
 function GameBoard() {
   const router = useRouter();
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) router.push('/login');
+    });
+  }, [router]);
+
   const [phase, setPhase] = useState<Phase>('IDLE');
   const [target, setTarget] = useState(0);
   const [tiles, setTiles] = useState<Tile[]>([]);

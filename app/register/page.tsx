@@ -1,17 +1,12 @@
 'use client';
-import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-
-import { createBrowserClient } from '@supabase/ssr';
+import { createClient } from '@/lib/supabase/client';
 import { useState } from 'react';
 
-// Create the browser client directly here
-const supabase = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const supabase = createClient();
+
 export default function RegisterPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -37,6 +32,7 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
 
     if (!email || !password || !confirmPassword) {
       setError('Please fill in all fields.');
@@ -251,6 +247,3 @@ export default function RegisterPage() {
     </div>
   );
 }
-
-import * as clientModule from '@/lib/supabase/client';
-console.log('FULL MODULE CONTENTS:', clientModule);
