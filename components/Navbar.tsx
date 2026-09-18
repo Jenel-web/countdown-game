@@ -1,8 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Swords, Dumbbell, Trophy, Clock, LogIn, UserPlus, Zap } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Swords, Dumbbell, Trophy, Clock, LogIn, UserPlus, Zap, LogOut } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 const navLinks = [
   { href: '/lobby',    label: 'Arena',    icon: Swords,    match: ['/lobby', '/game'] },
@@ -13,6 +16,48 @@ const navLinks = [
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const supabase = createClient();
+    let isMounted = true;
+
+    const fetchUser = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (isMounted) {
+          setUser(user);
+          setLoading(false);
+        }
+      } catch {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (isMounted) {
+        setUser(session?.user ?? null);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleSignOut = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    setUser(null);
+    router.push('/login');
+    router.refresh();
+  };
 
   return (
     <nav className="sticky top-0 z-50 w-full">
@@ -60,14 +105,37 @@ export default function Navbar() {
             })}
           </div>
 
-          {/* Auth */}
-          <div className="flex items-center gap-2">
-            <Link href="/login" className="btn-secondary px-4 py-1.5 text-sm">
-              <LogIn className="h-3.5 w-3.5" /> Sign In
-            </Link>
-            <Link href="/register" className="btn-primary px-4 py-1.5 text-sm">
-              <UserPlus className="h-3.5 w-3.5" /> Join
-            </Link>
+          {/* Auth State */}
+          <div className="flex items-center gap-2 min-h-[36px]">
+            {loading ? (
+              <div className="h-8 w-24 bg-surface-bright/20 animate-pulse rounded-pill"></div>
+            ) : user ? (
+              <div className="flex items-center gap-3">
+                <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-surface-high/80 border border-outline-variant/20 text-xs font-mono text-on-surface">
+                  <div className="w-2 h-2 rounded-full bg-primary-container shadow-[0_0_8px_rgba(0,229,255,0.8)] animate-pulse"></div>
+                  <span className="max-w-[140px] truncate text-primary-container font-medium">
+                    {user.email?.split('@')[0] || 'Operative'}
+                  </span>
+                </div>
+                <button
+                  onClick={handleSignOut}
+                  className="btn-secondary px-3 py-1.5 text-xs sm:text-sm flex items-center gap-1.5 hover:border-error/50 hover:text-error transition-colors"
+                  title="Sign Out"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            ) : (
+              <>
+                <Link href="/login" className="btn-secondary px-4 py-1.5 text-sm">
+                  <LogIn className="h-3.5 w-3.5" /> Sign In
+                </Link>
+                <Link href="/register" className="btn-primary px-4 py-1.5 text-sm">
+                  <UserPlus className="h-3.5 w-3.5" /> Join
+                </Link>
+              </>
+            )}
           </div>
 
         </div>
