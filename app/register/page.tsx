@@ -4,6 +4,7 @@ import Link from 'next/link';
 
 import { createClient } from '@/lib/supabase/client';
 import { useState } from 'react';
+import Navbar from '@/components/Navbar';
 
 const supabase = createClient();
 
@@ -15,6 +16,7 @@ export default function RegisterPage() {
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   // Password strength visual indicator
   const getStrength = (pw: string) => {
@@ -32,7 +34,7 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
+    setSuccess('');
 
     if (!email || !password || !confirmPassword) {
       setError('Please fill in all fields.');
@@ -48,11 +50,11 @@ export default function RegisterPage() {
       setError('You must acknowledge the Terms of Engagement.');
       return;
     }
-    // Simulating quick authorization
+
     setLoading(true);
 
     const { data, error: authError } = await supabase.auth.signUp({
-      email: email, // same email/username decision as login — treat this field as email for now
+      email: email, // same email/username decision as login
       password,
     });
 
@@ -62,21 +64,23 @@ export default function RegisterPage() {
       return;
     }
 
-    // Create the matching profile row with their chosen display name
+    // Safely upsert matching profile row to avoid profiles_pkey duplicate key violations when triggers exist
     if (data.user) {
       const { error: profileError } = await supabase
         .from('profiles')
-        .insert({ id: data.user.id, email: email });
+        .upsert({ id: data.user.id, email: email }, { onConflict: 'id' });
 
-      if (profileError) {
-        setLoading(false);
-        setError(profileError.message);
-        return;
+      if (profileError && profileError.code !== '23505' && !profileError.message?.includes('profiles_pkey')) {
+        console.warn('Profile sync warning:', profileError.message);
       }
     }
 
     setLoading(false);
-    router.push('/lobby');
+    setSuccess('Player is registered! Redirecting to login screen...');
+
+    setTimeout(() => {
+      router.push('/login?registered=true');
+    }, 1800);
   };
 
   return (
@@ -88,35 +92,29 @@ export default function RegisterPage() {
         <div className="kinetic-line" style={{ top: '80%', animationDelay: '4s' }}></div>
       </div>
 
-      {/* Minimal Header / Brand Anchor */}
-      <header className="fixed top-0 w-full flex justify-between items-center px-container-margin h-16 max-w-7xl mx-auto border-b border-white/5 bg-background/80 backdrop-blur-md z-50">
-        <div className="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg font-black tracking-tighter text-primary-container">
-          COUNTDOWN
-        </div>
-        <div className="flex gap-4 items-center">
-          <Link href="/login" className="font-label-caps text-label-caps text-on-surface-variant hover:text-primary-container transition-colors duration-200">
-            LOGIN
-          </Link>
-          <Link href="/register" className="font-label-caps text-label-caps text-primary-container font-bold px-4 py-2 border border-primary-container/30 rounded hover:bg-primary-container/10 transition-colors">
-            SIGN UP
-          </Link>
-        </div>
-      </header>
+      <Navbar />
 
       {/* Main Registration Area */}
-      <main className="flex-grow flex items-center justify-center px-gutter md:px-container-margin py-24 relative z-10">
+      <main className="flex-grow flex items-center justify-center px-gutter md:px-container-margin py-16 relative z-10">
         <div className="glass-card rounded-xl p-8 md:p-12 w-full max-w-md shadow-2xl relative overflow-hidden animate-[fadeIn_0.5s_ease-out]">
           {/* Decorative accent top line */}
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-secondary-container via-primary-container to-secondary-container"></div>
 
-          <div className="text-center mb-10">
+          <div className="text-center mb-8">
             <h1 className="font-headline-lg text-headline-lg text-on-surface font-semibold mb-2">Initialize Profile</h1>
             <p className="font-body-sm text-body-sm text-on-surface-variant">Enter your credentials to join the arena.</p>
           </div>
 
           {error && (
-            <div className="mb-6 px-4 py-2 rounded-lg border border-error bg-error-container/20 text-error text-xs font-mono">
+            <div className="mb-6 px-4 py-3 rounded-lg border border-error bg-error-container/20 text-error text-xs font-mono animate-[fadeIn_0.3s_ease-out]">
               {error}
+            </div>
+          )}
+
+          {success && (
+            <div className="mb-6 px-4 py-3 rounded-lg border border-primary-container/40 bg-primary-container/10 text-primary-container text-xs font-mono flex items-center gap-2 animate-[fadeIn_0.3s_ease-out] shadow-[0_0_15px_rgba(0,229,255,0.15)]">
+              <span className="material-symbols-outlined text-base">check_circle</span>
+              <span>{success}</span>
             </div>
           )}
 
