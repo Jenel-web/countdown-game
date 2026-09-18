@@ -1,14 +1,81 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
+import { createClient } from '@/lib/supabase/client';
+
+export interface Profile {
+  id: string;
+  email: string | null;
+  wins: number;
+  losses: number;
+  mmr: number;
+}
 
 export default function LobbyPage() {
   const router = useRouter();
   const [largeCount, setLargeCount] = useState(2);
   const [copied, setCopied] = useState(false);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
   const challengeLink = 'cntdn.gg/c/x9f2k';
+
+  useEffect(() => {
+    const supabase = createClient();
+    let isMounted = true;
+
+    async function fetchUserProfile() {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // 1. Get logged in auth user
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+        if (authError || !user) {
+          throw new Error(authError?.message || 'No active session found.');
+        }
+
+        // 2. Query matching profile row from database
+        const { data, error: dbError } = await supabase
+          .from('profiles')
+          .select('id, email, wins, losses, mmr')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (dbError) {
+          throw dbError;
+        }
+
+        if (isMounted) {
+          setProfile({
+            id: user.id,
+            email: data?.email || user.email || 'Operative',
+            wins: data?.wins ?? 0,
+            losses: data?.losses ?? 0,
+            mmr: data?.mmr ?? 1000,
+          });
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setError(err.message || 'Failed to load user profile.');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    fetchUserProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const copyLink = async () => {
     await navigator.clipboard.writeText(challengeLink).catch(() => {});
@@ -29,31 +96,62 @@ export default function LobbyPage() {
         
         {/* Left Column: Profile & Stats */}
         <section className="col-span-12 md:col-span-4 flex flex-col gap-stack-lg">
-          <div className="glass-panel rounded-xl p-stack-lg flex flex-col items-center text-center gap-stack-md relative overflow-hidden group">
+          <div className="glass-panel rounded-xl p-stack-lg flex flex-col items-center text-center gap-stack-md relative overflow-hidden group min-h-[320px] justify-center">
             <div className="absolute inset-0 bg-gradient-to-br from-primary-container/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            <img
-              alt="User123 Avatar"
-              className="w-32 h-32 rounded-full border-2 border-primary-container object-cover mb-2"
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuDv8oDesXLp1UIJV2DIeJWgDv1n4zvKk7w44ohmHuPw6X8flTD44Ruhn_gBkN91yZvtfk4y0Rnd3IC-hS8ObYF1-f2a8asAE2ygLh3pvBtct3RvpWtuJqrTRiuMsfkpgZT_YEOoiHM-b-pQiaOjHa3ZS83enjOl-_CQxHCq1NaUsgQS1qXBpEdNIPDGxXd4sY4J8Vgr4ruklhwJE6mhkPvw7mgos5X6g2Jnn5KSjyY6m9630jXuhXGUHg"
-            />
-            <div>
-              <h1 className="font-headline-lg text-headline-lg text-primary">User123</h1>
-              <span className="font-label-caps text-label-caps text-on-surface-variant mt-1 inline-block px-3 py-1 bg-surface-container rounded-full">Grandmaster</span>
-            </div>
-            <div className="w-full grid grid-cols-3 gap-base mt-4 pt-4 border-t border-outline-variant/15">
-              <div className="flex flex-col items-center">
-                <span className="font-label-caps text-label-caps text-on-surface-variant">Wins</span>
-                <span className="font-mono-metric text-mono-metric text-primary-fixed-dim mt-1">24</span>
+
+            {loading ? (
+              <div className="flex flex-col items-center gap-4 w-full animate-pulse py-4">
+                <div className="w-28 h-28 rounded-full bg-surface-bright/30"></div>
+                <div className="h-6 w-36 bg-surface-bright/30 rounded"></div>
+                <div className="h-4 w-24 bg-surface-bright/20 rounded"></div>
+                <div className="w-full grid grid-cols-3 gap-base mt-4 pt-4 border-t border-outline-variant/15">
+                  <div className="h-10 bg-surface-bright/20 rounded"></div>
+                  <div className="h-10 bg-surface-bright/20 rounded"></div>
+                  <div className="h-10 bg-surface-bright/20 rounded"></div>
+                </div>
               </div>
-              <div className="flex flex-col items-center border-l border-r border-outline-variant/15">
-                <span className="font-label-caps text-label-caps text-on-surface-variant">Losses</span>
-                <span className="font-mono-metric text-mono-metric text-on-background mt-1">10</span>
+            ) : error || !profile ? (
+              <div className="flex flex-col items-center gap-2 py-8">
+                <span className="material-symbols-outlined text-error text-3xl">warning</span>
+                <p className="text-error text-xs font-mono">{error || 'Unable to load profile'}</p>
               </div>
-              <div className="flex flex-col items-center">
-                <span className="font-label-caps text-label-caps text-on-surface-variant">Avg Time</span>
-                <span className="font-mono-metric text-mono-metric text-primary-fixed-dim mt-1">16.2s</span>
-              </div>
-            </div>
+            ) : (
+              <>
+                <img
+                  alt={`${profile.email}'s Avatar`}
+                  className="w-28 h-28 rounded-full border-2 border-primary-container object-cover mb-2 shadow-[0_0_15px_rgba(0,229,255,0.2)]"
+                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuDv8oDesXLp1UIJV2DIeJWgDv1n4zvKk7w44ohmHuPw6X8flTD44Ruhn_gBkN91yZvtfk4y0Rnd3IC-hS8ObYF1-f2a8asAE2ygLh3pvBtct3RvpWtuJqrTRiuMsfkpgZT_YEOoiHM-b-pQiaOjHa3ZS83enjOl-_CQxHCq1NaUsgQS1qXBpEdNIPDGxXd4sY4J8Vgr4ruklhwJE6mhkPvw7mgos5X6g2Jnn5KSjyY6m9630jXuhXGUHg"
+                />
+                <div>
+                  <h1 className="font-headline-lg text-lg sm:text-headline-lg text-primary font-bold truncate max-w-[240px]" title={profile.email || ''}>
+                    {profile.email}
+                  </h1>
+                  <span className="font-label-caps text-label-caps text-on-surface-variant mt-1 inline-block px-3 py-1 bg-surface-container rounded-full">
+                    Operative
+                  </span>
+                </div>
+                <div className="w-full grid grid-cols-3 gap-base mt-4 pt-4 border-t border-outline-variant/15">
+                  <div className="flex flex-col items-center">
+                    <span className="font-label-caps text-label-caps text-on-surface-variant">Wins</span>
+                    <span className="font-mono-metric text-mono-metric text-primary-fixed-dim mt-1">
+                      {profile.wins}
+                    </span>
+                  </div>
+                  <div className="flex flex-col items-center border-l border-r border-outline-variant/15">
+                    <span className="font-label-caps text-label-caps text-on-surface-variant">Losses</span>
+                    <span className="font-mono-metric text-mono-metric text-on-background mt-1">
+                      {profile.losses}
+                    </span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <span className="font-label-caps text-label-caps text-on-surface-variant">MMR</span>
+                    <span className="font-mono-metric text-mono-metric text-primary-container mt-1 font-bold">
+                      {profile.mmr}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </section>
 

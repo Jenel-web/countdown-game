@@ -784,11 +784,11 @@ body {
 .h-2{
   height: 0.5rem;
 }
+.h-28{
+  height: 7rem;
+}
 .h-3\.5{
   height: 0.875rem;
-}
-.h-32{
-  height: 8rem;
 }
 .h-4{
   height: 1rem;
@@ -817,6 +817,9 @@ body {
 .min-h-\[100px\]{
   min-height: 100px;
 }
+.min-h-\[320px\]{
+  min-height: 320px;
+}
 .min-h-\[36px\]{
   min-height: 36px;
 }
@@ -841,14 +844,17 @@ body {
 .w-24{
   width: 6rem;
 }
+.w-28{
+  width: 7rem;
+}
 .w-3\.5{
   width: 0.875rem;
 }
 .w-3\/4{
   width: 75%;
 }
-.w-32{
-  width: 8rem;
+.w-36{
+  width: 9rem;
 }
 .w-4{
   width: 1rem;
@@ -879,6 +885,9 @@ body {
 }
 .max-w-\[140px\]{
   max-width: 140px;
+}
+.max-w-\[240px\]{
+  max-width: 240px;
 }
 .max-w-\[900px\]{
   max-width: 900px;
@@ -1235,6 +1244,9 @@ body {
 .bg-surface-bright\/20{
   background-color: rgb(53 58 61 / 0.2);
 }
+.bg-surface-bright\/30{
+  background-color: rgb(53 58 61 / 0.3);
+}
 .bg-surface-container{
   --tw-bg-opacity: 1;
   background-color: rgb(27 32 35 / var(--tw-bg-opacity, 1));
@@ -1412,6 +1424,10 @@ body {
   padding-top: 1.5rem;
   padding-bottom: 1.5rem;
 }
+.py-8{
+  padding-top: 2rem;
+  padding-bottom: 2rem;
+}
 .py-stack-lg{
   padding-top: 24px;
   padding-bottom: 24px;
@@ -1474,6 +1490,10 @@ body {
 .text-2xl{
   font-size: 1.5rem;
   line-height: 2rem;
+}
+.text-3xl{
+  font-size: 1.875rem;
+  line-height: 2.25rem;
 }
 .text-5xl{
   font-size: 3rem;
@@ -1723,6 +1743,11 @@ body {
 }
 .shadow-\[0_0_15px_rgba\(0\2c 229\2c 255\2c 0\.15\)\]{
   --tw-shadow: 0 0 15px rgba(0,229,255,0.15);
+  --tw-shadow-colored: 0 0 15px var(--tw-shadow-color);
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+}
+.shadow-\[0_0_15px_rgba\(0\2c 229\2c 255\2c 0\.2\)\]{
+  --tw-shadow: 0 0 15px rgba(0,229,255,0.2);
   --tw-shadow-colored: 0 0 15px var(--tw-shadow-color);
   box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
 }
@@ -2290,6 +2315,13 @@ body {
   .sm\:text-6xl{
     font-size: 3.75rem;
     line-height: 1;
+  }
+
+  .sm\:text-headline-lg{
+    font-size: 32px;
+    line-height: 40px;
+    letter-spacing: -0.01em;
+    font-weight: 600;
   }
 
   .sm\:text-sm{
