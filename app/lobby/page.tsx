@@ -20,8 +20,10 @@ export default function LobbyPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [matchId, setMatchId] = useState<string | null>(null);
+  const [isCreatingMatch, setIsCreatingMatch] = useState<boolean>(false);
 
-  const challengeLink = 'cntdn.gg/c/x9f2k';
+  const challengeLink = matchId ? `cntdn.gg/c/${matchId}` : '';
 
   useEffect(() => {
     const supabase = createClient();
@@ -77,7 +79,20 @@ export default function LobbyPage() {
     };
   }, []);
 
+  const handleCreateChallenge = async () => {
+    try {
+      setIsCreatingMatch(true);
+      // Simulate match creation trigger
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      const generatedId = Math.random().toString(36).substring(2, 7);
+      setMatchId(generatedId);
+    } finally {
+      setIsCreatingMatch(false);
+    }
+  };
+
   const copyLink = async () => {
+    if (!challengeLink) return;
     await navigator.clipboard.writeText(challengeLink).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -195,17 +210,54 @@ export default function LobbyPage() {
               </div>
               <h3 className="font-headline-lg-mobile text-headline-lg-mobile text-primary-fixed-dim">Create Challenge Link</h3>
               <p className="font-body-sm text-body-sm text-on-surface-variant flex-1">Generate a unique link to challenge your friends directly.</p>
-              <div className="flex items-center mt-4">
-                <div className="bg-background border border-outline-variant/30 rounded-l-lg py-2 px-3 font-mono-metric text-mono-metric text-on-surface-variant flex-1 truncate text-sm">
-                  {challengeLink}
+              
+              {!matchId ? (
+                <div className="mt-4">
+                  <button
+                    onClick={handleCreateChallenge}
+                    disabled={isCreatingMatch}
+                    className="w-full bg-[#0A192F] border border-[#2962FF] hover:border-[#00E5FF] text-[#00E5FF] hover:bg-[#2962FF]/15 px-4 py-2.5 rounded-lg font-label-caps text-label-caps transition-all duration-200 h-[38px] flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer shadow-[0_0_12px_rgba(0,229,255,0.15)] hover:shadow-[0_0_18px_rgba(0,229,255,0.3)]"
+                  >
+                    {isCreatingMatch ? (
+                      <>
+                        <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
+                        <span>Creating Match...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-sm">add_link</span>
+                        <span>Create Challenge Link</span>
+                      </>
+                    )}
+                  </button>
                 </div>
-                <button
-                  onClick={copyLink}
-                  className="bg-[#0A192F] border border-[#2962FF] border-l-0 text-[#00E5FF] px-4 py-2 rounded-r-lg font-label-caps text-label-caps hover:bg-[#2962FF]/10 transition-colors h-[38px] flex items-center justify-center"
-                >
-                  {copied ? 'Copied' : 'Copy'}
-                </button>
-              </div>
+              ) : (
+                <div className="flex flex-col gap-3 mt-4">
+                  <div className="flex items-center">
+                    <input
+                      type="text"
+                      readOnly
+                      value={challengeLink}
+                      className="bg-background border border-outline-variant/30 rounded-l-lg py-2 px-3 font-mono-metric text-mono-metric text-on-surface-variant flex-1 truncate text-sm outline-none select-all"
+                    />
+                    <button
+                      onClick={copyLink}
+                      className="bg-[#0A192F] border border-[#2962FF] border-l-0 text-[#00E5FF] px-4 py-2 rounded-r-lg font-label-caps text-label-caps hover:bg-[#2962FF]/10 transition-colors h-[38px] flex items-center justify-center min-w-[90px]"
+                    >
+                      {copied ? 'Copied!' : 'Copy Link'}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00E5FF] opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00E5FF]"></span>
+                    </span>
+                    <span className="font-body-sm text-xs text-on-surface-variant">
+                      Waiting for opponent to join...
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Quick Match */}
