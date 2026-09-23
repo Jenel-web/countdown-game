@@ -69,7 +69,7 @@ export function generateTilePool(largeCount: number | 'random'): Tile[] {
     const large = shuffle([...LARGE_POOL]).slice(0, n);
 
     // Pick (6 - n) small numbers without reusing the same index slot
-    const smallIndices = shuffle([...Array(SMALL_POOL.length).keys()]).slice(0, 6 - n);
+    const smallIndices = shuffle(Array.from({ length: SMALL_POOL.length }, (_, i) => i)).slice(0, 6 - n);
     const small = smallIndices.map((i) => SMALL_POOL[i]);
 
     // Combine: large first, then small
@@ -308,6 +308,42 @@ export function checkMatchOver(p1TotalRaw: number, p2TotalRaw: number): 1 | 2 | 
         return p1TotalRaw >= p2TotalRaw ? 1 : 2; // both crossed in the same round — higher total wins
     }
     return null;
+}
+
+/**
+ * Validates a submitted series of arithmetic steps against initial tile values.
+ */
+export function validateSubmission(
+    initialTiles: number[],
+    steps: Step[]
+): { valid: boolean; finalValue: number } {
+    if (!Array.isArray(steps) || steps.length === 0) {
+        return { valid: false, finalValue: 0 };
+    }
+
+    const available = [...initialTiles];
+
+    for (const step of steps) {
+        const { a, op, b, result } = step;
+
+        const idxA = available.indexOf(a);
+        if (idxA === -1) return { valid: false, finalValue: 0 };
+        available.splice(idxA, 1);
+
+        const idxB = available.indexOf(b);
+        if (idxB === -1) return { valid: false, finalValue: 0 };
+        available.splice(idxB, 1);
+
+        const calculated = applyOp(a, op as '+' | '−' | '×' | '÷', b);
+        if (calculated === null || calculated !== result) {
+            return { valid: false, finalValue: 0 };
+        }
+
+        available.push(calculated);
+    }
+
+    const lastStep = steps[steps.length - 1];
+    return { valid: true, finalValue: lastStep.result };
 }
 
 console.log('TEST scoreRound (exact vs miss, solvable):', scoreRound(
