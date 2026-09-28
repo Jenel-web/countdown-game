@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "vitest"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run lib/gameEngine.test.ts",
+    "test:integration": "vitest run countdown-server/test/integration",
+    "test:db": "vitest run countdown-server/test/db"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.6",
@@ -24,8 +28,12 @@
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.38",
+    "socket.io-client": "^4.8.4",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.4.5",
-    "vitest": "^2.0.1"
+    "vitest": "^2.1.9"
+  },
+  "allowScripts": {
+    "esbuild@0.21.5": true
   }
 }

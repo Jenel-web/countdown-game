@@ -87,7 +87,9 @@ export function startNextRound(io: AppServer, roomManager: RoomManager, matchId:
   // Socket.io's built-in way to send one message to every socket in a
   // group at once, rather than emitting twice to two individual sockets.
   io.to(matchId).emit('round_start', {
-    roundNumber: room.currentRound + 1, // resetRound already incremented internally; +1 here reflects the NEW round about to display, matching resetRound's own increment — see RoomManager.resetRound
+    // `room` is a live reference to the same object resetRound() just mutated,
+    // so currentRound ALREADY holds the new round's number. Do not add 1.
+    roundNumber: room.currentRound,
     tiles,
     target,
     startTimestamp,
@@ -172,28 +174,34 @@ export async function evaluateRound(
     const winnerId = winnerSlot === 1 ? updatedRoom.player1Id : updatedRoom.player2Id!;
     const loserId = winnerSlot === 1 ? updatedRoom.player2Id! : updatedRoom.player1Id;
 
-    // Calls the finish_match() Postgres function from Phase 3's scoring
-    // schema work — a SECURITY DEFINER function that atomically marks the
-    // match finished AND updates both players' wins/losses/MMR in one go.
+    // Snapshot everything we need, then claim (remove) the room BEFORE any
+    // `await` — same principle as the disconnect handler: a concurrent
+    // disconnect must not be able to find this room and start a second,
+    // contradictory forfeit while we're waiting on the database.
+    const winnerScore = winnerSlot === 1 ? updatedRoom.player1TotalRaw : updatedRoom.player2TotalRaw;
+    const loserScore = winnerSlot === 1 ? updatedRoom.player2TotalRaw : updatedRoom.player1TotalRaw;
+    const finalTotals = {
+      player1TotalRaw: updatedRoom.player1TotalRaw,
+      player2TotalRaw: updatedRoom.player2TotalRaw,
+    };
+    roomManager.removeRoom(matchId);
+
+    // Calls the 5-argument finish_match() Postgres function (SECURITY
+    // DEFINER, idempotent) that atomically completes the match row and
+    // updates both players' profile stats.
     const { error: finishError } = await adminClient.rpc('finish_match', {
       p_match_id: matchId,
       p_winner_id: winnerId,
       p_loser_id: loserId,
-      p_winner_score: winnerSlot === 1 ? updatedRoom.player1TotalRaw : updatedRoom.player2TotalRaw,
-      p_loser_score: winnerSlot === 1 ? updatedRoom.player2TotalRaw : updatedRoom.player1TotalRaw,
+      p_winner_score: winnerScore,
+      p_loser_score: loserScore,
     });
 
     if (finishError) {
       console.error(`[match ${matchId}] finish_match RPC failed:`, finishError);
     }
 
-    io.to(matchId).emit('match_over', {
-      winnerId,
-      player1TotalRaw: updatedRoom.player1TotalRaw,
-      player2TotalRaw: updatedRoom.player2TotalRaw,
-    });
-
-    roomManager.removeRoom(matchId);
+    io.to(matchId).emit('match_over', { winnerId, ...finalTotals });
   } else {
     // Nobody's reached 5 points yet — begin the next round.
     startNextRound(io, roomManager, matchId);
