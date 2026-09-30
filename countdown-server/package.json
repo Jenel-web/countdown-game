@@ -5,9 +5,6 @@
   "description": "Server-authoritative real-time 1v1 match server for the Countdown math game.",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
