@@ -34,9 +34,33 @@ export interface Tile {
   value: number;
   used: boolean;
   selected: boolean;
+  /**
+   * CLIENT-ONLY FLAG — the server's generateTilePool() never sets this.
+   * It is always `undefined` in tiles received from `round_start`.
+   * The client sets it to `true` on intermediate computed tiles (pool tiles
+   * created during a calculation step) to distinguish them from the
+   * original six tiles. Do not read this field in any server-side logic.
+   */
   isGenerated?: boolean;
 }
 
+/**
+ * CRITICAL — `op` uses Unicode math symbols, NOT ASCII equivalents:
+ *
+ *   '+'  U+002B  (standard plus — same as ASCII)
+ *   '−'  U+2212  MINUS SIGN       ← NOT the hyphen/dash '-' (U+002D)
+ *   '×'  U+00D7  MULTIPLICATION SIGN ← NOT the letter 'x'
+ *   '÷'  U+00F7  DIVISION SIGN    ← NOT the slash '/'
+ *
+ * TypeScript will NOT catch a wrong literal here because each is a
+ * distinct string type that satisfies the union at compile time, but
+ * validateSubmission()'s applyOp() switch will fall through and return
+ * null, scoring the submission as invalid with no error thrown.
+ *
+ * Always reference the operator characters by copy-pasting from this
+ * comment, from the lib/gameEngine.ts OPERATORS constant, or from the
+ * UI button labels — never by typing them from your keyboard.
+ */
 export interface Step {
   a: number;
   op: '+' | '−' | '×' | '÷';
@@ -96,6 +120,12 @@ export interface ServerToClientEvents {
 
   /** Sent to BOTH players once a round has been fully scored. */
   round_result: (payload: {
+    /**
+     * This equals the SAME value as the `roundNumber` in the preceding
+     * `round_start` event for this round — it is already incremented by
+     * `resetRound()` at round-start time, not at result time. Display it
+     * directly as "Round N result", never add 1.
+     */
     roundNumber: number;
     solvable: boolean;
     player1: PlayerRoundResult;
@@ -138,6 +168,12 @@ export interface ClientToServerEvents {
    * to confirm the claimed result is actually legal. See
    * game/gameEngine.ts's validateSubmission() and
    * socket/handlers/roundHandlers.ts for where that happens.
+   *
+   * CLIENT RULE: always compute resultValue as
+   *   `steps[steps.length - 1]?.result ?? 0`
+   * The server ignores this field entirely, but a mismatch between what
+   * the client displays and what it sends is a latent debugging hazard.
+   * Sending the real last-step result keeps the two in agreement.
    */
   submit_answer: (payload: { steps: Step[]; resultValue: number }) => void;
 }

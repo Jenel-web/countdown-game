@@ -9,15 +9,54 @@ export interface Tile {
   value: number;
   used: boolean;
   selected: boolean;
+  /**
+   * CLIENT-ONLY FLAG — never present in payloads received from the server.
+   *
+   * The server's generateTilePool() never sets this field; it will always
+   * be `undefined` on tiles arriving in a `round_start` event.
+   *
+   * The client sets it to `true` when it synthesises an intermediate result
+   * tile (e.g. 25 + 50 → 75) so the UI can distinguish original tiles from
+   * derived ones in the pool display. Do NOT read this field inside any
+   * socket event handler or submission logic — treat every tile from the
+   * server as if isGenerated does not exist.
+   */
   isGenerated?: boolean;
 }
 
+/**
+ * CRITICAL — Unicode operator literals, not ASCII equivalents:
+ *
+ *   '+'  U+002B  (standard plus — same as ASCII)
+ *   '−'  U+2212  MINUS SIGN       ← NOT the ASCII hyphen '-' (U+002D)
+ *   '×'  U+00D7  MULTIPLICATION SIGN ← NOT the letter 'x'
+ *   '÷'  U+00F7  DIVISION SIGN    ← NOT the ASCII slash '/'
+ *
+ * TypeScript will accept the wrong literal because it treats them as
+ * distinct string types, but validateSubmission() on the server matches
+ * against applyOp()'s switch cases which use these exact Unicode characters.
+ * A wrong literal silently makes every submission invalid.
+ *
+ * Always use the OPERATORS constant below, or copy-paste from this comment.
+ * Never hardcode operator strings by typing them from your keyboard.
+ */
 export interface Step {
   a: number;
-  op: '+' | '−' | '×' | '÷'; // Change from string to literal union
+  op: '+' | '\u2212' | '\u00D7' | '\u00F7';
   b: number;
   result: number;
 }
+
+/**
+ * The four legal Countdown operators in their canonical Unicode form.
+ * Import and use this constant in any component that needs to render or
+ * compare operators — do not re-declare operator arrays inline.
+ *
+ * @example
+ *   OPERATORS.forEach(op => <button key={op}>{op}</button>)
+ */
+export const OPERATORS = ['+', '\u2212', '\u00D7', '\u00F7'] as const;
+export type Operator = (typeof OPERATORS)[number];
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
