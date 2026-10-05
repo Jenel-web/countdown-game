@@ -82,10 +82,36 @@ export default function LobbyPage() {
   const handleCreateChallenge = async () => {
     try {
       setIsCreatingMatch(true);
-      // Simulate match creation trigger
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      const generatedId = Math.random().toString(36).substring(2, 7);
-      setMatchId(generatedId);
+      setError(null);
+
+      const supabase = createClient();
+
+      // 1. Get the current authenticated user — player1_id must be their real UUID
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        setError('You must be logged in to create a match.');
+        return;
+      }
+
+      // 2. Insert the real match row — this is what the socket server looks up
+      //    on join_room. Without this row, the server returns error: not_found.
+      const { data, error: insertError } = await supabase
+        .from('matches')
+        .insert({ player1_id: user.id, status: 'pending' })
+        .select('id')
+        .single();
+
+      if (insertError || !data?.id) {
+        setError(insertError?.message ?? 'Failed to create match. Please try again.');
+        return;
+      }
+
+      // 3. Navigate the creator directly to the match page — they are player1.
+      //    The WaitingLobby UI inside /match will show the invite link
+      //    once the socket connects and the server emits waiting_for_opponent.
+      router.push(`/match/${data.id}`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unexpected error.');
     } finally {
       setIsCreatingMatch(false);
     }
