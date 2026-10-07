@@ -48,6 +48,8 @@ export interface WaitingLobbyProps {
    *  testable without needing a real window.location. Defaults to
    *  window.location.href if omitted (safe in the browser). */
   matchUrl?: string;
+  /** Optional callback fired when the user cancels waiting to leave the lobby cleanly. */
+  onCancel?: () => void;
 }
 
 // --------------------------------------------------------------------------
@@ -73,7 +75,7 @@ const cardVariants = {
 // Component
 // --------------------------------------------------------------------------
 
-export default function WaitingLobby({ phase, matchUrl }: WaitingLobbyProps) {
+export default function WaitingLobby({ phase, matchUrl, onCancel }: WaitingLobbyProps) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
 
@@ -95,9 +97,13 @@ export default function WaitingLobby({ phase, matchUrl }: WaitingLobbyProps) {
 
   // RULE: socket.disconnect() MUST precede router.push() (spec §2.1 cancel, §3.1 CTA)
   const handleLeave = useCallback(() => {
-    destroySocket();
-    router.push('/lobby');
-  }, [router]);
+    if (onCancel) {
+      onCancel();
+    } else {
+      destroySocket();
+      router.push('/lobby');
+    }
+  }, [onCancel, router]);
 
   return (
     <>

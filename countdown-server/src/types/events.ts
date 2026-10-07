@@ -144,6 +144,24 @@ export interface ServerToClientEvents {
   /** Sent to whichever player is LEFT after their opponent disconnects. */
   opponent_left: () => void;
 
+  /**
+   * Sent to the opponent of the player who requested a rematch.
+   * The recipient should show a modal asking if they want to play again.
+   */
+  rematch_offer: () => void;
+
+  /**
+   * Sent to BOTH players when both accept a rematch.
+   * newMatchId is the freshly created match row — both clients should
+   * navigate to /match/<newMatchId>.
+   */
+  rematch_accepted: (payload: { newMatchId: string }) => void;
+
+  /**
+   * Sent to the player who requested the rematch when their opponent declines.
+   */
+  rematch_declined: () => void;
+
   /** Generic error channel: bad/missing token, room full, match not found, etc. */
   error: (payload: { code: string; message: string }) => void;
 }
@@ -156,8 +174,27 @@ export interface ClientToServerEvents {
   /** Fired once, right after connecting, to join a specific match's room. */
   join_room: (payload: { matchId: string }) => void;
 
+  /**
+   * Fired when the host cancels the room while waiting for an opponent.
+   * Server deletes the pending match and cleans up RoomManager.
+   */
+  cancel_room: (payload: { matchId: string }) => void;
+
   /** Fired whenever the local player's status changes (e.g. they start typing/clicking). */
   player_status: (payload: { status: 'thinking' | 'submitted' }) => void;
+
+  /**
+   * Fired when the local player wants to invite their opponent to a rematch.
+   * Only valid after match_over has been received.
+   */
+  request_rematch: (payload: { matchId: string }) => void;
+
+  /**
+   * Fired by the opponent in response to a rematch_offer.
+   * accepted=true means both proceed to the new match;
+   * accepted=false cancels the rematch and both return to lobby.
+   */
+  rematch_response: (payload: { matchId: string; accepted: boolean }) => void;
 
   /**
    * Fired when the player hits Submit, OR when their local 30s timer hits

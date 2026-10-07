@@ -23,7 +23,11 @@ export default function LobbyPage() {
   const [matchId, setMatchId] = useState<string | null>(null);
   const [isCreatingMatch, setIsCreatingMatch] = useState<boolean>(false);
 
-  const challengeLink = matchId ? `cntdn.gg/c/${matchId}` : '';
+  const challengeLink = matchId
+    ? typeof window !== 'undefined'
+      ? `${window.location.origin}/match/${matchId}`
+      : `/match/${matchId}`
+    : '';
 
   useEffect(() => {
     const supabase = createClient();
@@ -106,14 +110,25 @@ export default function LobbyPage() {
         return;
       }
 
-      // 3. Navigate the creator directly to the match page — they are player1.
-      //    The WaitingLobby UI inside /match will show the invite link
-      //    once the socket connects and the server emits waiting_for_opponent.
-      router.push(`/match/${data.id}`);
+      // Set matchId so user can share link and cancel or enter room
+      setMatchId(data.id);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unexpected error.');
     } finally {
       setIsCreatingMatch(false);
+    }
+  };
+
+  const handleCancelChallenge = async () => {
+    if (!matchId) return;
+    try {
+      const supabase = createClient();
+      await supabase.from('matches').delete().eq('id', matchId).eq('status', 'pending');
+    } catch (err) {
+      console.error('Failed to delete pending match on cancel:', err);
+    } finally {
+      setMatchId(null);
+      setCopied(false);
     }
   };
 
@@ -264,7 +279,7 @@ export default function LobbyPage() {
                       type="text"
                       readOnly
                       value={challengeLink}
-                      className="bg-background border border-outline-variant/30 rounded-l-lg py-2 px-3 font-mono-metric text-mono-metric text-on-surface-variant flex-1 truncate text-sm outline-none select-all"
+                      className="bg-background border border-outline-variant/30 rounded-l-lg py-2 px-3 font-mono text-on-surface-variant flex-1 truncate text-xs outline-none select-all"
                     />
                     <button
                       onClick={copyLink}
@@ -281,6 +296,22 @@ export default function LobbyPage() {
                     <span className="font-body-sm text-xs text-on-surface-variant">
                       Waiting for opponent to join...
                     </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-2">
+                    <button
+                      onClick={handleCancelChallenge}
+                      className="py-2 px-3 rounded-lg border border-outline-variant/40 hover:border-error hover:text-error text-on-surface-variant text-xs font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">close</span>
+                      Cancel Link
+                    </button>
+                    <button
+                      onClick={() => router.push(`/match/${matchId}`)}
+                      className="py-2 px-3 rounded-lg bg-primary-container text-on-primary-container hover:bg-primary text-xs font-bold uppercase tracking-wider transition-all neon-glow flex items-center justify-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">swords</span>
+                      Enter Arena
+                    </button>
                   </div>
                 </div>
               )}

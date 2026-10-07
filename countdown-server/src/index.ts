@@ -24,6 +24,7 @@ import { Server } from 'socket.io';
 import { authMiddleware } from './socket/authMiddleware';
 import { registerRoomHandlers } from './socket/handlers/roomHandlers';
 import { registerRoundHandlers } from './socket/handlers/roundHandlers';
+import { registerRematchHandlers } from './socket/handlers/rematchHandlers';
 import { RoomManager } from './rooms/RoomManager';
 import type {
   ClientToServerEvents,
@@ -81,6 +82,7 @@ io.on('connection', (socket) => {
 
   registerRoomHandlers(io, socket, roomManager);
   registerRoundHandlers(io, socket, roomManager);
+  registerRematchHandlers(io, socket);
 
   // Note: the actual 'disconnect' listener lives inside
   // registerRoomHandlers (roomHandlers.ts), since disconnect handling is

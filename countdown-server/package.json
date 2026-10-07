@@ -5,13 +5,12 @@
   "description": "Server-authoritative real-time 1v1 match server for the Countdown math game.",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "next dev -p 4000",
-    "lint": "next lint",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:unit": "vitest run lib/gameEngine.test.ts",
-    "test:integration": "vitest run countdown-server/test/integration",
-    "test:db": "vitest run countdown-server/test/db"
+    "test:unit": "vitest run lib/gameEngine.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

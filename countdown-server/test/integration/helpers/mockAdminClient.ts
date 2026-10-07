@@ -93,7 +93,29 @@ export function createMockAdminClient() {
             },
         },
 
-        from(table: 'matches' | 'rounds') {
+        from(table: 'matches' | 'rounds' | 'profiles') {
+            if (table === 'profiles') {
+                return {
+                    select() {
+                        return {
+                            in(_column: string, ids: string[]) {
+                                return Promise.resolve({
+                                    data: ids.map((id) => ({ id, mmr: 1000 })),
+                                    error: null,
+                                });
+                            },
+                        };
+                    },
+                    update(_patch: { mmr: number }) {
+                        return {
+                            eq(_column: 'id', _value: string) {
+                                return Promise.resolve({ error: null });
+                            },
+                        };
+                    },
+                };
+            }
+
             if (table === 'matches') {
                 return {
                     select() {

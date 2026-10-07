@@ -40,6 +40,7 @@ import type { WaitingPhase } from '@/components/WaitingLobby';
 import ReconnectBanner from '@/components/ReconnectBanner';
 import RoundResultModal from '@/components/RoundResultModal';
 import GameOverModal from '@/components/GameOverModal';
+import RematchModal, { RematchState } from '@/components/RematchModal';
 import type {
   Tile,
   Step,
@@ -119,7 +120,21 @@ const tileVariants = {
 };
 
 // --------------------------------------------------------------------------
-// PlayerSidebar — shared by both sides of the HUD
+// Helpers
+// --------------------------------------------------------------------------
+
+function computeRankTier(mmr: number): { tier: string; nextTier: number } {
+  if (mmr >= 2000) return { tier: 'Grandmaster', nextTier: 2500 };
+  if (mmr >= 1600) return { tier: 'Master', nextTier: 2000 };
+  if (mmr >= 1300) return { tier: 'Diamond', nextTier: 1600 };
+  if (mmr >= 1000) return { tier: 'Platinum', nextTier: 1300 };
+  if (mmr >= 700) return { tier: 'Gold', nextTier: 1000 };
+  if (mmr >= 400) return { tier: 'Silver', nextTier: 700 };
+  return { tier: 'Bronze', nextTier: 400 };
+}
+
+// --------------------------------------------------------------------------
+// PlayerSidebar — Enlarged In-Match Profile HUD (~2/3 screen height)
 // --------------------------------------------------------------------------
 
 interface PlayerSidebarProps {
@@ -130,85 +145,193 @@ interface PlayerSidebarProps {
   mmr: number;
   totalRaw: number;
   status?: 'thinking' | 'submitted' | null;
-  /** If true, renders this as the "you" side (green accent). */
+  /** If true, renders this as the "you" side (cyan accent). */
   isSelf?: boolean;
 }
 
 function PlayerSidebar({ label, email, wins, losses, mmr, totalRaw, status, isSelf }: PlayerSidebarProps) {
+  const displayName = email ? email.split('@')[0] : label;
   const initials = (email ?? label).slice(0, 2).toUpperCase();
-  const accentClass = isSelf ? 'border-primary-fixed-dim' : 'border-secondary/40';
+  const accentBorder = isSelf ? 'border-[#00E5FF]/40' : 'border-[#2962FF]/40';
   const accentGlow = isSelf
-    ? 'shadow-[0_0_18px_rgba(0,240,255,0.25)]'
-    : 'shadow-[0_0_10px_rgba(0,0,0,0.3)]';
+    ? 'shadow-[0_0_25px_rgba(0,229,255,0.18)] hover:shadow-[0_0_35px_rgba(0,229,255,0.28)]'
+    : 'shadow-[0_0_20px_rgba(41,98,255,0.15)] hover:shadow-[0_0_30px_rgba(41,98,255,0.25)]';
+  const accentColor = isSelf ? 'text-[#00E5FF]' : 'text-[#82B1FF]';
+  const badgeBg = isSelf ? 'bg-[#00E5FF]/10 text-[#00E5FF] border-[#00E5FF]/30' : 'bg-[#2962FF]/15 text-[#82B1FF] border-[#2962FF]/30';
+
+  const totalMatches = wins + losses;
+  const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
+  const currentPts = (totalRaw / 100).toFixed(2);
+  const ptsProgress = Math.min(100, (totalRaw / 500) * 100);
 
   return (
-    <div className={`glass-panel rounded-2xl p-4 flex flex-col items-center gap-3 border ${accentClass} ${accentGlow} h-full`}>
-      {/* Avatar */}
-      <div className={`w-14 h-14 rounded-full flex items-center justify-center font-black text-xl border-2 ${accentClass} bg-surface-container-high`}>
-        {initials}
-      </div>
+    <div
+      className={`glass-panel rounded-2xl p-6 flex flex-col justify-between items-center text-center border ${accentBorder} ${accentGlow} h-[66vh] min-h-[560px] max-h-[720px] w-full transition-all duration-300 relative overflow-hidden backdrop-blur-xl`}
+    >
+      {/* Background radial highlight */}
+      <div
+        className={`absolute top-0 left-1/2 -translate-x-1/2 w-48 h-32 blur-3xl pointer-events-none ${
+          isSelf ? 'bg-[#00E5FF]/10' : 'bg-[#2962FF]/15'
+        }`}
+      />
 
-      {/* Name */}
-      <div className="flex flex-col items-center gap-0.5 text-center">
-        <span className={`font-bold text-sm truncate max-w-[110px] ${isSelf ? 'text-primary-fixed-dim' : 'text-on-surface'}`}>
+      {/* TOP SECTION: Identity & Avatar */}
+      <div className="flex flex-col items-center w-full relative z-10">
+        {/* Role badge */}
+        <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border mb-3 flex items-center gap-1.5 ${badgeBg}`}>
+          <span className="material-symbols-outlined text-[13px]">
+            {isSelf ? 'person' : 'swords'}
+          </span>
+          {isSelf ? 'Your Operative' : 'Rival Operative'}
+        </div>
+
+        {/* Scaled Avatar */}
+        <div className="relative mb-3 group">
+          <div
+            className={`w-24 h-24 sm:w-28 sm:h-28 rounded-full flex items-center justify-center font-black text-3xl sm:text-4xl border-2 ${
+              isSelf ? 'border-[#00E5FF] shadow-[0_0_20px_rgba(0,229,255,0.4)]' : 'border-[#2962FF] shadow-[0_0_20px_rgba(41,98,255,0.3)]'
+            } bg-surface-container-high transition-transform duration-300 group-hover:scale-105`}
+          >
+            <span className={accentColor}>{initials}</span>
+          </div>
+
+          {/* Active pulse status dot */}
+          <span className="absolute bottom-1 right-1 flex h-4 w-4">
+            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isSelf ? 'bg-[#00E5FF]' : 'bg-[#2962FF]'}`} />
+            <span className={`relative inline-flex rounded-full h-4 w-4 border-2 border-background ${isSelf ? 'bg-[#00E5FF]' : 'bg-[#2962FF]'}`} />
+          </span>
+        </div>
+
+        {/* Username */}
+        <h3
+          className="font-headline-lg-mobile text-base sm:text-lg font-black text-on-background tracking-tight max-w-[220px] truncate"
+          title={email ?? label}
+        >
+          {displayName}
+        </h3>
+        <p className="text-on-surface-variant font-mono text-[11px] truncate max-w-[200px] mt-0.5 opacity-80">
           {email ?? label}
-        </span>
-        <span className="text-on-surface-variant text-[10px] font-bold uppercase tracking-widest">{label}</span>
+        </p>
       </div>
 
-      {/* Stats row */}
-      <div className="w-full grid grid-cols-3 gap-1 pt-2 border-t border-outline-variant/20 text-center">
-        <div>
-          <div className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wide">W</div>
-          <div className="font-mono text-sm font-bold text-on-surface">{wins}</div>
+      {/* MIDDLE SECTION: MMR & Win/Loss Records */}
+      <div className="w-full flex flex-col gap-3 py-3 border-y border-outline-variant/15 relative z-10">
+        {/* MMR Display Card */}
+        <div className="bg-surface-container-low/80 rounded-xl p-3 border border-outline-variant/20 flex flex-col items-center">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant flex items-center gap-1">
+            <span className="material-symbols-outlined text-[13px] text-[#00E5FF]">trending_up</span>
+            MMR Rating
+          </span>
+          <span className="font-mono text-2xl sm:text-3xl font-black text-on-surface mt-0.5 tracking-tight">
+            {mmr}
+          </span>
+          <span className="text-[10px] font-semibold text-[#00E5FF] uppercase tracking-widest mt-0.5">
+            {mmr >= 1600 ? 'Master' : mmr >= 1300 ? 'Diamond' : mmr >= 1000 ? 'Platinum' : mmr >= 700 ? 'Gold' : 'Silver'} Tier
+          </span>
         </div>
-        <div>
-          <div className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wide">MMR</div>
-          <div className="font-mono text-sm font-bold text-primary-container">{mmr}</div>
+
+        {/* Win / Loss Grid */}
+        <div className="grid grid-cols-2 gap-2">
+          {/* Wins */}
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2 flex flex-col items-center">
+            <span className="text-[10px] font-bold uppercase text-emerald-400 flex items-center gap-1">
+              <span className="material-symbols-outlined text-[12px]">emoji_events</span> Wins
+            </span>
+            <span className="font-mono font-black text-lg text-emerald-300 mt-0.5">
+              {wins}
+            </span>
+          </div>
+
+          {/* Losses */}
+          <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-2 flex flex-col items-center">
+            <span className="text-[10px] font-bold uppercase text-rose-400 flex items-center gap-1">
+              <span className="material-symbols-outlined text-[12px]">cancel</span> Losses
+            </span>
+            <span className="font-mono font-black text-lg text-rose-300 mt-0.5">
+              {losses}
+            </span>
+          </div>
         </div>
-        <div>
-          <div className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wide">L</div>
-          <div className="font-mono text-sm font-bold text-on-surface">{losses}</div>
+
+        {/* Win Rate meter */}
+        <div className="flex flex-col gap-1 px-1">
+          <div className="flex justify-between items-center text-[10px] text-on-surface-variant font-mono">
+            <span>Win Rate</span>
+            <span className="font-bold text-on-surface">{winRate}%</span>
+          </div>
+          <div className="w-full h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-emerald-500 to-[#00E5FF] rounded-full transition-all duration-500"
+              style={{ width: `${winRate}%` }}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Round score */}
-      <div className={`w-full rounded-xl px-3 py-2 text-center border ${accentClass} bg-surface-container-low`}>
-        <div className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wide mb-0.5">Score</div>
-        <div className={`font-mono font-black text-xl ${isSelf ? 'text-primary-fixed-dim' : 'text-on-surface'}`}>
-          {(totalRaw / 100).toFixed(2)}
+      {/* BOTTOM SECTION: Live Match Score & Status */}
+      <div className="w-full flex flex-col gap-2 relative z-10">
+        {/* Match Points Card */}
+        <div className={`w-full rounded-xl p-3 border ${accentBorder} bg-surface-container-low flex flex-col items-center`}>
+          <div className="flex justify-between items-center w-full text-[10px] text-on-surface-variant font-bold uppercase tracking-wider mb-1">
+            <span>Match Score</span>
+            <span className="font-mono text-primary-fixed-dim">Goal: 5.0 pts</span>
+          </div>
+          <div className={`font-mono font-black text-3xl ${isSelf ? 'text-[#00E5FF]' : 'text-on-surface'}`}>
+            {currentPts}
+          </div>
+          {/* Progress bar towards 5.0 points */}
+          <div className="w-full h-1.5 bg-surface-container-highest rounded-full overflow-hidden mt-2">
+            <div
+              className={`h-full rounded-full transition-all duration-300 ${isSelf ? 'bg-[#00E5FF]' : 'bg-[#2962FF]'}`}
+              style={{ width: `${ptsProgress}%` }}
+            />
+          </div>
         </div>
-      </div>
 
-      {/* Opponent status badge (right panel only) */}
-      {!isSelf && status !== undefined && (
-        <AnimatePresence mode="wait">
-          {status !== null && (
-            <motion.div
-              key={status}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-surface-container-highest"
-            >
-              {status === 'submitted' ? (
-                <>
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-fixed-dim opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-primary-fixed-dim" />
-                  </span>
-                  <span className="text-primary-fixed-dim">Submitted</span>
-                </>
+        {/* Opponent live status indicator (or self indicator) */}
+        {!isSelf ? (
+          <div className="min-h-[28px] flex items-center justify-center">
+            <AnimatePresence mode="wait">
+              {status ? (
+                <motion.div
+                  key={status}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider border ${
+                    status === 'submitted'
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                      : 'bg-surface-container-highest border-outline-variant/30 text-on-surface-variant'
+                  }`}
+                >
+                  {status === 'submitted' ? (
+                    <>
+                      <span className="material-symbols-outlined text-[14px] text-emerald-400">check_circle</span>
+                      <span>Answer Submitted</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-fixed-dim opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-fixed-dim" />
+                      </span>
+                      <span>Thinking…</span>
+                    </>
+                  )}
+                </motion.div>
               ) : (
-                <>
-                  <span className="inline-flex h-2 w-2 rounded-full bg-on-surface-variant/50" />
-                  <span className="text-on-surface-variant">Thinking…</span>
-                </>
+                <span className="text-[11px] text-on-surface-variant/60 font-mono">In Combat</span>
               )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      )}
+            </AnimatePresence>
+          </div>
+        ) : (
+          <div className="min-h-[28px] flex items-center justify-center text-[11px] text-primary-fixed-dim font-bold uppercase tracking-wider">
+            <span className="inline-flex items-center gap-1">
+              <span className="material-symbols-outlined text-[14px]">shield</span> Ready For Battle
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -219,7 +342,18 @@ function PlayerSidebar({ label, email, wins, losses, mmr, totalRaw, status, isSe
 
 function MatchBoard({ matchId }: { matchId: string }) {
   const router = useRouter();
-  const { isConnected, isReconnecting, submitAnswer, emitThinking } = useGameSocket();
+  const {
+    isConnected,
+    isReconnecting,
+    submitAnswer,
+    emitThinking,
+    requestRematch,
+    respondRematch,
+    cancelRoom,
+  } = useGameSocket();
+
+  // ── Rematch negotiation state ───────────────────────────────────────────
+  const [rematchState, setRematchState] = useState<RematchState>(null);
 
   // ── Auth & my profile ───────────────────────────────────────────────────
   const [userId, setUserId] = useState<string | null>(null);
@@ -598,13 +732,16 @@ function MatchBoard({ matchId }: { matchId: string }) {
   useSocketEvent('round_result', handleRoundResult);
 
   /**
-   * match_over — fetch updated profile for MMR delta, then show GAME_OVER.
+   * match_over — fetch updated profile for MMR delta, compute tier milestone, then show GAME_OVER.
    */
   const handleMatchOver = useCallback(async (payload: MatchOverPayload) => {
     // Cancel the modal→next-round timer — game is over.
     if (modalTimerRef.current) { clearTimeout(modalTimerRef.current); modalTimerRef.current = null; }
 
-    // Fetch fresh profile to get updated MMR (server's finish_match RPC already ran).
+    const isWinner = payload.winnerId === userId;
+    const expectedDelta = isWinner ? 25 : -15;
+
+    // Fetch fresh profile to get updated MMR (server's finish_match RPC + MMR update ran).
     try {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -615,27 +752,70 @@ function MatchBoard({ matchId }: { matchId: string }) {
           .eq('id', user.id)
           .maybeSingle();
 
+        const prevMmr = myPrevMmrRef.current;
+        let delta = expectedDelta;
+        let finalMmr = Math.max(0, prevMmr + delta);
+
         if (data) {
-          const newProfile = { email: data.email ?? null, wins: data.wins ?? 0, losses: data.losses ?? 0, mmr: data.mmr ?? 1000 };
+          const newProfile = {
+            email: data.email ?? null,
+            wins: data.wins ?? 0,
+            losses: data.losses ?? 0,
+            mmr: data.mmr ?? 1000,
+          };
           setMyProfile(newProfile);
-          const prevMmr = myPrevMmrRef.current;
-          setMmrStats({
-            previousMmr: prevMmr,
-            delta: newProfile.mmr - prevMmr,
-            currentMmr: newProfile.mmr,
-          });
+          if (newProfile.mmr !== prevMmr) {
+            delta = newProfile.mmr - prevMmr;
+            finalMmr = newProfile.mmr;
+          }
         }
+
+        const tierInfo = computeRankTier(finalMmr);
+        setMmrStats({
+          previousMmr: prevMmr,
+          delta,
+          currentMmr: finalMmr,
+          rankTier: tierInfo.tier,
+          nextTierMmr: tierInfo.nextTier,
+        });
       }
     } catch (e) {
       console.error('[match_over] failed to refresh profile', e);
+      const prevMmr = myPrevMmrRef.current;
+      const tierInfo = computeRankTier(Math.max(0, prevMmr + expectedDelta));
+      setMmrStats({
+        previousMmr: prevMmr,
+        delta: expectedDelta,
+        currentMmr: Math.max(0, prevMmr + expectedDelta),
+        rankTier: tierInfo.tier,
+        nextTierMmr: tierInfo.nextTier,
+      });
     }
 
     setPhase('GAME_OVER');
-    // matchOverData used only for winner derivation — store it in local var
-    // then update state so the game-over modal can render.
     setLastMatchOver(payload);
-  }, []);
+  }, [userId]);
   useSocketEvent('match_over', handleMatchOver);
+
+  // ── Rematch socket listeners ──────────────────────────────────────────────
+  const handleRematchOffer = useCallback(() => {
+    setRematchState('incoming_offer');
+  }, []);
+  useSocketEvent('rematch_offer', handleRematchOffer);
+
+  const handleRematchAccepted = useCallback((payload: { newMatchId: string }) => {
+    setRematchState('accepted');
+    setTimeout(() => {
+      destroySocket();
+      router.push(`/match/${payload.newMatchId}`);
+    }, 1200);
+  }, [router]);
+  useSocketEvent('rematch_accepted', handleRematchAccepted);
+
+  const handleRematchDeclined = useCallback(() => {
+    setRematchState('declined');
+  }, []);
+  useSocketEvent('rematch_declined', handleRematchDeclined);
 
   // Separate state for match_over payload (avoids closure issues in handleMatchOver)
   const [lastMatchOver, setLastMatchOver] = useState<MatchOverPayload | null>(null);
@@ -729,6 +909,11 @@ function MatchBoard({ matchId }: { matchId: string }) {
       <WaitingLobby
         phase={waitingPhase}
         matchUrl={typeof window !== 'undefined' ? window.location.href : ''}
+        onCancel={() => {
+          cancelRoom(matchId);
+          destroySocket();
+          router.push('/lobby');
+        }}
       />
 
       {/* PREPARING overlay */}
@@ -786,24 +971,51 @@ function MatchBoard({ matchId }: { matchId: string }) {
 
       {/* Game Over modal */}
       <GameOverModal
-        isOpen={phase === 'GAME_OVER'}
+        isOpen={phase === 'GAME_OVER' && rematchState === null}
         winner={gameOverWinner}
-        playerName={myProfile.email ?? 'You'}
-        opponentName={opponentProfile.email ?? 'Opponent'}
+        playerName={myProfile.email ? myProfile.email.split('@')[0] : 'You'}
+        opponentName={opponentProfile.email ? opponentProfile.email.split('@')[0] : 'Opponent'}
         playerFinalScore={myFinalScore}
         opponentFinalScore={oppFinalScore}
         roundsHistory={gameOverHistory}
         mmrStats={mmrStats}
         matchDurationSeconds={Math.floor((Date.now() - matchStartRef.current) / 1000)}
         onReturnToLobby={() => { destroySocket(); router.push('/lobby'); }}
-        onPlayAgain={() => { destroySocket(); router.push('/lobby'); }}
+        onPlayAgain={() => {
+          requestRematch(matchId);
+          setRematchState('waiting_for_response');
+        }}
+      />
+
+      {/* Rematch Modal */}
+      <RematchModal
+        state={rematchState}
+        opponentName={opponentProfile.email ? opponentProfile.email.split('@')[0] : 'Opponent'}
+        onAccept={() => {
+          respondRematch(matchId, true);
+          setRematchState('accepted');
+        }}
+        onDecline={() => {
+          respondRematch(matchId, false);
+          setRematchState(null);
+        }}
+        onCancelRequest={() => {
+          setRematchState(null);
+          destroySocket();
+          router.push('/lobby');
+        }}
+        onReturnToLobby={() => {
+          setRematchState(null);
+          destroySocket();
+          router.push('/lobby');
+        }}
       />
 
       {/* ── Main layout — 3-column on lg, stacked on mobile ─────────────────── */}
-      <main className="flex-1 w-full max-w-[1200px] mx-auto px-4 py-4 grid grid-cols-1 lg:grid-cols-[220px_1fr_220px] gap-4 items-start">
+      <main className="flex-1 w-full max-w-[1440px] mx-auto px-4 py-4 grid grid-cols-1 lg:grid-cols-[280px_1fr_280px] xl:grid-cols-[300px_1fr_300px] gap-6 items-start">
 
         {/* LEFT SIDEBAR — My profile */}
-        <aside className="hidden lg:flex flex-col gap-3">
+        <aside className="hidden lg:flex flex-col gap-3 sticky top-20">
           <PlayerSidebar
             label="You"
             email={myProfile.email}
@@ -998,7 +1210,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
         </div>
 
         {/* RIGHT SIDEBAR — Opponent profile */}
-        <aside className="hidden lg:flex flex-col gap-3">
+        <aside className="hidden lg:flex flex-col gap-3 sticky top-20">
           <PlayerSidebar
             label="Opponent"
             email={opponentProfile.email}

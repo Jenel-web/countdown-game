@@ -82,6 +82,15 @@ export interface UseGameSocketReturn {
    * Only use 'thinking' (e.g. when the player first selects a tile).
    */
   emitThinking: () => boolean;
+
+  /** Request a rematch with the opponent. */
+  requestRematch: (matchId: string) => boolean;
+
+  /** Respond to a rematch offer (accept or decline). */
+  respondRematch: (matchId: string, accepted: boolean) => boolean;
+
+  /** Cancel a waiting room and tear down state. */
+  cancelRoom: (matchId: string) => boolean;
 }
 
 // Typed emit function that mirrors ClientToServerEvents exactly.
@@ -137,7 +146,37 @@ export function useGameSocket(): UseGameSocketReturn {
     return emit('player_status', { status: 'thinking' });
   }, [emit]);
 
-  return { isConnected, isReconnecting, emit, submitAnswer, emitThinking };
+  const requestRematch = useCallback(
+    (matchId: string): boolean => {
+      return emit('request_rematch', { matchId });
+    },
+    [emit]
+  );
+
+  const respondRematch = useCallback(
+    (matchId: string, accepted: boolean): boolean => {
+      return emit('rematch_response', { matchId, accepted });
+    },
+    [emit]
+  );
+
+  const cancelRoom = useCallback(
+    (matchId: string): boolean => {
+      return emit('cancel_room', { matchId });
+    },
+    [emit]
+  );
+
+  return {
+    isConnected,
+    isReconnecting,
+    emit,
+    submitAnswer,
+    emitThinking,
+    requestRematch,
+    respondRematch,
+    cancelRoom,
+  };
 }
 
 // --------------------------------------------------------------------------
@@ -185,15 +224,13 @@ export function useSocketEvent<E extends keyof ServerToClientEvents>(
     // This single wrapper reference is what socket.on() and socket.off()
     // both receive, guaranteeing the cleanup actually removes this listener.
     const stableWrapper = (...args: Parameters<ServerToClientEvents[E]>) => {
-      // @ts-expect-error — spreading args into a union-typed function.
-      // Safe at runtime: args are always the correct type for this event.
       (handlerRef.current as (...a: typeof args) => void)(...args);
     };
 
-    socket.on(event, stableWrapper as ServerToClientEvents[E]);
+    (socket.on as (evt: string, fn: (...args: any[]) => void) => void)(event, stableWrapper);
 
     return () => {
-      socket.off(event, stableWrapper as ServerToClientEvents[E]);
+      (socket.off as (evt: string, fn: (...args: any[]) => void) => void)(event, stableWrapper);
     };
   }, [socket, event]); // handler intentionally excluded — handled via ref
 }

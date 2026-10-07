@@ -121,6 +121,23 @@ export function registerRoomHandlers(
     startNextRound(io, roomManager, matchId);
   });
 
+  socket.on('cancel_room', async ({ matchId }) => {
+    const room = roomManager.getRoom(matchId);
+    if (!room || room.player1Id !== socket.data.userId || room.player2Id) {
+      return;
+    }
+    roomManager.removeRoom(matchId);
+    socket.leave(matchId);
+    const { error } = await adminClient
+      .from('matches')
+      .delete()
+      .eq('id', matchId)
+      .eq('status', 'pending');
+    if (error) {
+      console.error(`[match ${matchId}] cancel_room DB delete failed:`, error);
+    }
+  });
+
   socket.on('disconnect', async () => {
     const matchId = socket.data.matchId;
     if (!matchId) return; // this socket never joined a room — nothing to clean up
@@ -137,24 +154,26 @@ export function registerRoomHandlers(
 
     if (!remainingPlayerId || !disconnectedPlayerId) {
       // The match never actually had two players yet (e.g. player1
-      // created a match and left before anyone joined) — just clean up,
-      // no forfeit logic needed since there's no opponent to award a win to.
+      // created a match and left before anyone joined) — just clean up.
+      // Also delete the pending match row from Supabase so it doesn't
+      // accumulate as a stale 'pending' entry.
       roomManager.removeRoom(matchId);
+      adminClient
+        .from('matches')
+        .delete()
+        .eq('id', matchId)
+        .eq('status', 'pending')
+        .then(({ error }) => {
+          if (error) {
+            console.error(`[match ${matchId}] failed to delete pending match row on cancel:`, error);
+          }
+        });
       return;
     }
 
     // Design decision from system planning: a disconnect mid-match is
     // treated as an immediate forfeit, not a pause. The remaining player
-    // wins outright. (Real reconnect support — giving a dropped player a
-    // grace period to rejoin — is a reasonable future improvement, but
-    // deliberately out of scope for this first working version.)
-    // CLAIM THE ROOM BEFORE ANY `await`. Node only switches between event
-    // handlers at an `await`. If we removed the room AFTER awaiting the
-    // database call (as an earlier version did), the other player's
-    // disconnect handler could run during that await, still see the room
-    // in memory, and declare a second, contradictory winner. Removing it
-    // synchronously first means whichever handler runs first owns the
-    // forfeit, and any later disconnect finds no room and exits early.
+    // wins outright.
     const winnerScore = remainingSlot === 'player1' ? room.player1TotalRaw : room.player2TotalRaw;
     const loserScore = remainingSlot === 'player1' ? room.player2TotalRaw : room.player1TotalRaw;
 
@@ -172,6 +191,28 @@ export function registerRoomHandlers(
 
     if (finishError) {
       console.error(`[match ${matchId}] finish_match RPC failed on disconnect forfeit:`, finishError);
+    }
+
+    // Update MMR for forfeit resolution
+    try {
+      const { data: profiles } = await adminClient
+        .from('profiles')
+        .select('id, mmr')
+        .in('id', [remainingPlayerId, disconnectedPlayerId]);
+
+      if (profiles) {
+        const winnerProf = profiles.find((p) => p.id === remainingPlayerId);
+        const loserProf = profiles.find((p) => p.id === disconnectedPlayerId);
+        const winnerNew = (winnerProf?.mmr ?? 1000) + 25;
+        const loserNew = Math.max(0, (loserProf?.mmr ?? 1000) - 15);
+
+        await Promise.all([
+          adminClient.from('profiles').update({ mmr: winnerNew }).eq('id', remainingPlayerId),
+          adminClient.from('profiles').update({ mmr: loserNew }).eq('id', disconnectedPlayerId),
+        ]);
+      }
+    } catch (mmrErr) {
+      console.error(`[match ${matchId}] failed to update forfeit MMR:`, mmrErr);
     }
   });
 }

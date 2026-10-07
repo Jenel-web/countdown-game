@@ -201,6 +201,31 @@ export async function evaluateRound(
       console.error(`[match ${matchId}] finish_match RPC failed:`, finishError);
     }
 
+    // Update MMR ratings AND win/loss records.
+    // Winner: mmr +25, wins +1. Loser: mmr -15 (floor 0), losses +1.
+    try {
+      const { data: profiles } = await adminClient
+        .from('profiles')
+        .select('id, mmr, wins, losses')
+        .in('id', [winnerId, loserId]);
+
+      if (profiles) {
+        const winnerProf = profiles.find((p) => p.id === winnerId);
+        const loserProf = profiles.find((p) => p.id === loserId);
+        const winnerNewMmr = (winnerProf?.mmr ?? 1000) + 25;
+        const loserNewMmr = Math.max(0, (loserProf?.mmr ?? 1000) - 15);
+        const winnerNewWins = (winnerProf?.wins ?? 0) + 1;
+        const loserNewLosses = (loserProf?.losses ?? 0) + 1;
+
+        await Promise.all([
+          adminClient.from('profiles').update({ mmr: winnerNewMmr, wins: winnerNewWins }).eq('id', winnerId),
+          adminClient.from('profiles').update({ mmr: loserNewMmr, losses: loserNewLosses }).eq('id', loserId),
+        ]);
+      }
+    } catch (mmrErr) {
+      console.error(`[match ${matchId}] failed to update match MMR/win-loss:`, mmrErr);
+    }
+
     io.to(matchId).emit('match_over', { winnerId, ...finalTotals });
   } else {
     // Nobody's reached 5 points yet — begin the next round.
