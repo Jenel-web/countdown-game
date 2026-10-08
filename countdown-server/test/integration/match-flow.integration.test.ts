@@ -276,6 +276,11 @@ describe('full match flow (real sockets, mocked Supabase)', () => {
         const row = mockAdmin.__state.matches.find((m) => m.id === matchId);
         expect(row?.status).toBe('finished');
         expect(row?.winner_id).toBe('winner-user');
+
+        const winnerUpdate = mockAdmin.__state.profileUpdates.find((u) => u.id === 'winner-user');
+        const loserUpdate = mockAdmin.__state.profileUpdates.find((u) => u.id === 'loser-user');
+        expect(winnerUpdate?.patch).toMatchObject({ mmr: 1025, wins: 1 });
+        expect(loserUpdate?.patch).toMatchObject({ mmr: 985, losses: 1 });
     }, 20000);
 
     it('a mid-match disconnect awards the remaining player an immediate forfeit win', async () => {
@@ -312,6 +317,11 @@ describe('full match flow (real sockets, mocked Supabase)', () => {
         const row = mockAdmin.__state.matches.find((m) => m.id === matchId);
         expect(row?.status).toBe('finished');
         expect(row?.winner_id).toBe('staying-user');
+
+        const winnerForfeitUpdate = mockAdmin.__state.profileUpdates.find((u) => u.id === 'staying-user');
+        const loserForfeitUpdate = mockAdmin.__state.profileUpdates.find((u) => u.id === 'leaving-user');
+        expect(winnerForfeitUpdate?.patch).toMatchObject({ mmr: 1025, wins: 1 });
+        expect(loserForfeitUpdate?.patch).toMatchObject({ mmr: 985, losses: 1 });
     });
 
     it('BOTH players disconnecting at once finishes the match exactly once (no double finish_match)', async () => {

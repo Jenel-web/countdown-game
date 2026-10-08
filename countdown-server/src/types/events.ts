@@ -76,6 +76,14 @@ export interface PlayerRoundResult {
    *  avoid floating-point rounding bugs. See game/gameEngine.ts for why. */
   pointsRaw: number;
   outcome: 'win' | 'loss' | 'draw';
+  /** Final calculated value submitted, or null if timed out. */
+  result?: number | null;
+  /** Time in ms taken from round start to submission, or null if timed out. */
+  timeMs?: number | null;
+  /** Absolute difference to target, or null if timed out. */
+  diff?: number | null;
+  /** Detailed scoring explanation based on gameEngine rules. */
+  reason?: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -139,6 +139,64 @@ export default function LobbyPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Auto-redirect host to match arena when second player joins
+  useEffect(() => {
+    if (!matchId) return;
+    const supabase = createClient();
+    let isMounted = true;
+
+    const interval = setInterval(async () => {
+      try {
+        const { data } = await supabase
+          .from('matches')
+          .select('player2_id, status')
+          .eq('id', matchId)
+          .maybeSingle();
+
+        if (!isMounted) return;
+        if (data && (data.player2_id || data.status === 'active')) {
+          clearInterval(interval);
+          router.push(`/match/${matchId}`);
+        }
+      } catch (err) {
+        console.error('Error polling match presence:', err);
+      }
+    }, 1200);
+
+    const channel = supabase
+      .channel(`lobby_match_${matchId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'matches',
+          filter: `id=eq.${matchId}`,
+        },
+        (payload) => {
+          if (!isMounted) return;
+          const row = payload.new as { player2_id?: string | null; status?: string };
+          if (row && (row.player2_id || row.status === 'active')) {
+            clearInterval(interval);
+            router.push(`/match/${matchId}`);
+          }
+        }
+      )
+      .subscribe();
+
+    const handleBeforeUnload = () => {
+      supabase.from('matches').delete().eq('id', matchId).eq('status', 'pending');
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [matchId, router]);
+
   const handleQuickMatch = () => {
     router.push('/game');
   };

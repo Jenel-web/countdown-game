@@ -288,6 +288,8 @@ export interface PlayerRoundResult {
   points: number;     // decimal, e.g. 0.7 — for DISPLAY only
   pointsRaw: number;   // integer, e.g. 70 — store THIS in the database
   outcome: RoundOutcome;
+  /** Detailed scoring explanation based on Countdown rules. */
+  reason?: string;
 }
 
 export interface RoundScoreResult {
@@ -297,8 +299,8 @@ export interface RoundScoreResult {
   solvable: boolean;
 }
 
-function toResult(pointsRaw: number, outcome: RoundOutcome): PlayerRoundResult {
-  return { points: pointsRaw / POINTS_SCALE, pointsRaw, outcome };
+function toResult(pointsRaw: number, outcome: RoundOutcome, reason?: string): PlayerRoundResult {
+  return { points: pointsRaw / POINTS_SCALE, pointsRaw, outcome, reason };
 }
 
 /**
@@ -325,18 +327,26 @@ export function scoreRound(
   // Both players failed to submit — draw, no points, no W/L change.
   if (p1.result === null && p2.result === null) {
     return {
-      player1: toResult(0, 'draw'),
-      player2: toResult(0, 'draw'),
+      player1: toResult(0, 'draw', 'Both players timed out (0.00 pts)'),
+      player2: toResult(0, 'draw', 'Both players timed out (0.00 pts)'),
       solvable,
     };
   }
 
   // Exactly one player timed out — the other gets an automatic max win.
   if (p1.result === null) {
-    return { player1: toResult(0, 'loss'), player2: toResult(100, 'win'), solvable };
+    return {
+      player1: toResult(0, 'loss', 'Timed out / incomplete math (0.00 pts)'),
+      player2: toResult(100, 'win', 'Opponent timed out (+1.00 pts)'),
+      solvable,
+    };
   }
   if (p2.result === null) {
-    return { player1: toResult(100, 'win'), player2: toResult(0, 'loss'), solvable };
+    return {
+      player1: toResult(100, 'win', 'Opponent timed out (+1.00 pts)'),
+      player2: toResult(0, 'loss', 'Timed out / incomplete math (0.00 pts)'),
+      solvable,
+    };
   }
 
   const d1 = Math.abs(p1.result - target);
@@ -353,7 +363,14 @@ export function scoreRound(
 
   if (winner === 'draw') {
     const pts = solvable ? 35 : 50;
-    return { player1: toResult(pts, 'draw'), player2: toResult(pts, 'draw'), solvable };
+    const drawReason = solvable
+      ? 'Tie on distance & speed (Solvable) (+0.35 pts)'
+      : 'Tie on distance & speed (Unsolvable) (+0.50 pts)';
+    return {
+      player1: toResult(pts, 'draw', drawReason),
+      player2: toResult(pts, 'draw', drawReason),
+      solvable,
+    };
   }
 
   const winnerDiff = winner === 1 ? d1 : d2;
@@ -361,27 +378,63 @@ export function scoreRound(
 
   let winnerPts: number;
   let loserPts: number;
+  let winnerReason: string;
+  let loserReason: string;
 
   if (winnerDiff === 0) {
     // Exact match.
     winnerPts = 100;
-    loserPts = loserDiff <= 3 ? 35 : 0;
+    winnerReason = 'Exact Target Hit (🎯 100% Match) (+1.00 pts)';
+    if (loserDiff <= 3) {
+      loserPts = 35;
+      loserReason = `Close Approximation (Diff: ${loserDiff} ≤ 3) (+0.35 pts)`;
+    } else {
+      loserPts = 0;
+      loserReason = `Missed Target (Diff: ${loserDiff} > 3) (0.00 pts)`;
+    }
   } else if (solvable) {
     // Target was solvable, but the winner didn't find the exact answer.
     winnerPts = 70;
-    loserPts = loserDiff <= 3 ? 35 : 0;
+    winnerReason = (d1 === d2)
+      ? `Equal Distance (Diff: ${winnerDiff}), Won on Speed (+0.70 pts)`
+      : `Closest Solvable Approximation (Diff: ${winnerDiff}) (+0.70 pts)`;
+    if (loserDiff <= 3) {
+      loserPts = 35;
+      loserReason = `Close Approximation (Diff: ${loserDiff} ≤ 3) (+0.35 pts)`;
+    } else {
+      loserPts = 0;
+      loserReason = `Missed Target (Diff: ${loserDiff} > 3) (0.00 pts)`;
+    }
   } else {
     // Target was unsolvable — weighted by how close the winner got.
-    winnerPts = winnerDiff <= 3 ? 100 : winnerDiff <= 7 ? 80 : 50;
-    loserPts = loserDiff <= 3 ? 40 : 0;
+    if (winnerDiff <= 3) {
+      winnerPts = 100;
+      winnerReason = `Unsolvable Target: Optimal Approximation (Diff: ${winnerDiff} ≤ 3) (+1.00 pts)`;
+    } else if (winnerDiff <= 7) {
+      winnerPts = 80;
+      winnerReason = `Unsolvable Target: Close Approximation (Diff: ${winnerDiff} ≤ 7) (+0.80 pts)`;
+    } else {
+      winnerPts = 50;
+      winnerReason = `Unsolvable Target: Best Available Math (Diff: ${winnerDiff}) (+0.50 pts)`;
+    }
+
+    if (loserDiff <= 3) {
+      loserPts = 40;
+      loserReason = `Unsolvable Target: Runner-up Within 3 (Diff: ${loserDiff}) (+0.40 pts)`;
+    } else {
+      loserPts = 0;
+      loserReason = `Unsolvable Target: Missed Target (Diff: ${loserDiff} > 3) (0.00 pts)`;
+    }
   }
 
   const p1Pts = winner === 1 ? winnerPts : loserPts;
   const p2Pts = winner === 2 ? winnerPts : loserPts;
+  const p1Reason = winner === 1 ? winnerReason : loserReason;
+  const p2Reason = winner === 2 ? winnerReason : loserReason;
 
   return {
-    player1: toResult(p1Pts, winner === 1 ? 'win' : 'loss'),
-    player2: toResult(p2Pts, winner === 2 ? 'win' : 'loss'),
+    player1: toResult(p1Pts, winner === 1 ? 'win' : 'loss', p1Reason),
+    player2: toResult(p2Pts, winner === 2 ? 'win' : 'loss', p2Reason),
     solvable,
   };
 }

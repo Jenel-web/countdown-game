@@ -35,6 +35,7 @@ export default function RematchModal({
   onReturnToLobby,
 }: RematchModalProps) {
   const [secondsLeft, setSecondsLeft] = useState(OFFER_TIMEOUT_SECS);
+  const [declinedSecondsLeft, setDeclinedSecondsLeft] = useState(5);
 
   // Auto-decline incoming offer after 30 s if ignored
   useEffect(() => {
@@ -54,6 +55,25 @@ export default function RematchModal({
 
     return () => clearInterval(timer);
   }, [state, onDecline]);
+
+  // Auto-redirect to lobby after 5 s when offer is declined
+  useEffect(() => {
+    if (state !== 'declined') return;
+    setDeclinedSecondsLeft(5);
+
+    const timer = setInterval(() => {
+      setDeclinedSecondsLeft((s) => {
+        if (s <= 1) {
+          clearInterval(timer);
+          onReturnToLobby();
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [state, onReturnToLobby]);
 
   if (!state) return null;
 
@@ -165,7 +185,10 @@ export default function RematchModal({
                   Rematch Declined
                 </h2>
                 <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed">
-                  <span className="text-primary-fixed-dim font-bold">{opponentName}</span> declined the rematch offer or left the match.
+                  <span className="text-primary-fixed-dim font-bold">{opponentName}</span> refused the rematch invitation.
+                </p>
+                <p className="text-[11px] text-on-surface-variant/70 font-mono mt-1">
+                  Returning to lobby in {declinedSecondsLeft}s...
                 </p>
               </div>
 
@@ -176,7 +199,7 @@ export default function RematchModal({
                   className="w-full py-3 rounded-xl bg-surface-container-high border border-outline-variant hover:border-primary-fixed-dim text-on-surface font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2"
                 >
                   <Home className="w-4 h-4" />
-                  Return to Lobby
+                  Return to Lobby Now
                 </button>
               </div>
             </>

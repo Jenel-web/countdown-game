@@ -79,10 +79,14 @@ export function registerRematchHandlers(
       return;
     }
 
-    // Create a fresh match row; the requester becomes player1.
+    // Create a fresh match row; both players are immediately registered.
     const { data, error } = await adminClient
       .from('matches')
-      .insert({ player1_id: offer.requesterUserId, status: 'pending' })
+      .insert({
+        player1_id: offer.requesterUserId,
+        player2_id: socket.data.userId,
+        status: 'active',
+      })
       .select('id')
       .single();
 
@@ -98,5 +102,17 @@ export function registerRematchHandlers(
 
     // Tell both players to navigate to the new match.
     io.to(matchId).emit('rematch_accepted', { newMatchId: data.id });
+  });
+
+  socket.on('disconnect', () => {
+    for (const [matchId, offer] of pendingOffers.entries()) {
+      if (offer.requesterSocketId === socket.id) {
+        pendingOffers.delete(matchId);
+      } else if (socket.data.matchId === matchId) {
+        // The opponent disconnected while a rematch offer was pending for this match
+        io.to(offer.requesterSocketId).emit('rematch_declined');
+        pendingOffers.delete(matchId);
+      }
+    }
   });
 }

@@ -61,10 +61,16 @@ export interface FinishMatchCall {
  * in match-flow.integration.test.ts for exactly why the factory shape
  * matters here (Vitest's mock hoisting rules).
  */
+export interface FakeProfileUpdate {
+    id: string;
+    patch: Partial<{ mmr: number; wins: number; losses: number }>;
+}
+
 export function createMockAdminClient() {
     const matches: FakeMatchRow[] = [];
     const rounds: FakeRoundRow[] = [];
     const finishMatchCalls: FinishMatchCall[] = [];
+    const profileUpdates: FakeProfileUpdate[] = [];
     // Simulated network latency for rpc(), in ms. Real Supabase calls take tens of
     // milliseconds; an instant mock hides race conditions that only appear when
     // an `await` actually yields control to other pending events.
@@ -74,7 +80,7 @@ export function createMockAdminClient() {
         // Exposed so tests can seed data and make assertions directly, e.g.
         // mockAdminClient.__state.matches.push({...}) before starting a test,
         // or expect(mockAdminClient.__state.rounds).toHaveLength(1) after.
-        __state: { matches, rounds, finishMatchCalls },
+        __state: { matches, rounds, finishMatchCalls, profileUpdates },
         __setRpcLatency(ms: number) {
             rpcLatencyMs = ms;
         },
@@ -100,15 +106,16 @@ export function createMockAdminClient() {
                         return {
                             in(_column: string, ids: string[]) {
                                 return Promise.resolve({
-                                    data: ids.map((id) => ({ id, mmr: 1000 })),
+                                    data: ids.map((id) => ({ id, mmr: 1000, wins: 0, losses: 0 })),
                                     error: null,
                                 });
                             },
                         };
                     },
-                    update(_patch: { mmr: number }) {
+                    update(patch: Partial<{ mmr: number; wins: number; losses: number }>) {
                         return {
-                            eq(_column: 'id', _value: string) {
+                            eq(_column: 'id', value: string) {
+                                profileUpdates.push({ id: value, patch });
                                 return Promise.resolve({ error: null });
                             },
                         };

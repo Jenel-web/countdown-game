@@ -40,9 +40,15 @@ import type {
 type AppServer = Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 
-/** How long players get to submit each round, in milliseconds. Matches the
- *  30-second timer already used throughout your solo/training game modes. */
+/** How long players spend in preparation countdown before gameplay begins. */
+const ROUND_PREP_MS = process.env.NODE_ENV === 'test' ? 0 : 5_000;
+
+/** How long players get to submit once gameplay begins (exactly 30 seconds). */
 const ROUND_DURATION_MS = 30_000;
+
+/** How long the RoundResultModal is displayed between rounds before the next round starts. */
+export const ROUND_RESULT_DISPLAY_MS = process.env.NODE_ENV === 'test' ? 50 : 5_000;
+
 
 /**
  * NOTE ON large-number count for multiplayer rounds:
@@ -58,16 +64,12 @@ const ROUND_DURATION_MS = 30_000;
 /**
  * Begins a brand-new round: generates fresh tiles/target, runs the
  * solvability check ONCE, resets the room's per-round state, starts the
- * 30-second server-side timeout, and broadcasts round_start to both
- * players simultaneously.
+ * 35-second total timeout (5s prep + 30s gameplay), and broadcasts round_start
+ * with startTimestamp set to the exact moment gameplay begins.
  */
 export function startNextRound(io: AppServer, roomManager: RoomManager, matchId: string): void {
   const room = roomManager.getRoom(matchId);
   if (!room || !room.player2Id) {
-    // Defensive guard: this should never be reachable in normal play,
-    // since startNextRound is only ever called once both players are
-    // present — but bailing out safely here is cheap insurance against a
-    // future bug elsewhere accidentally calling this too early.
     return;
   }
 
@@ -78,32 +80,25 @@ export function startNextRound(io: AppServer, roomManager: RoomManager, matchId:
     target
   );
 
-  const startTimestamp = Date.now();
-  roomManager.resetRound(matchId, tiles, target, solveResult.solvable, startTimestamp);
+  // The 30-second gameplay starts exactly 5 seconds from now (after the 5s prep countdown).
+  const now = Date.now();
+  const gameplayStartTimestamp = now + ROUND_PREP_MS;
+  roomManager.resetRound(matchId, tiles, target, solveResult.solvable, gameplayStartTimestamp);
 
-  // Broadcast to EVERYONE currently in this Socket.io "room" (both
-  // players' sockets are members of a room named after the matchId — see
-  // socket.join(matchId) in roomHandlers.ts). io.to(roomName).emit(...) is
-  // Socket.io's built-in way to send one message to every socket in a
-  // group at once, rather than emitting twice to two individual sockets.
   io.to(matchId).emit('round_start', {
-    // `room` is a live reference to the same object resetRound() just mutated,
-    // so currentRound ALREADY holds the new round's number. Do not add 1.
     roundNumber: room.currentRound,
     tiles,
     target,
-    startTimestamp,
+    startTimestamp: gameplayStartTimestamp,
     durationMs: ROUND_DURATION_MS,
   });
 
-  // Re-fetch the room, since resetRound() already bumped currentRound —
-  // we want the timer's closure to reference the CURRENT round number for
-  // logging/debugging clarity, not a stale value captured before the reset.
+  const totalRoundDurationMs = ROUND_PREP_MS + ROUND_DURATION_MS;
   const timer = setTimeout(() => {
     evaluateRound(io, roomManager, matchId).catch((err) => {
       console.error(`[round ${matchId}] evaluateRound failed on timeout:`, err);
     });
-  }, ROUND_DURATION_MS);
+  }, totalRoundDurationMs);
 
   roomManager.setRoundTimer(matchId, timer);
 }
@@ -162,8 +157,18 @@ export async function evaluateRound(
   io.to(matchId).emit('round_result', {
     roundNumber: updatedRoom.currentRound,
     solvable: scoreResult.solvable,
-    player1: scoreResult.player1,
-    player2: scoreResult.player2,
+    player1: {
+      ...scoreResult.player1,
+      result: p1sub.result,
+      timeMs: p1sub.timeMs,
+      diff: p1sub.result !== null ? Math.abs(p1sub.result - room.currentTarget) : null,
+    },
+    player2: {
+      ...scoreResult.player2,
+      result: p2sub.result,
+      timeMs: p2sub.timeMs,
+      diff: p2sub.result !== null ? Math.abs(p2sub.result - room.currentTarget) : null,
+    },
     player1TotalRaw: updatedRoom.player1TotalRaw,
     player2TotalRaw: updatedRoom.player2TotalRaw,
   });
@@ -228,8 +233,12 @@ export async function evaluateRound(
 
     io.to(matchId).emit('match_over', { winnerId, ...finalTotals });
   } else {
-    // Nobody's reached 5 points yet — begin the next round.
-    startNextRound(io, roomManager, matchId);
+    // Nobody's reached 5 points yet — give both players 5 seconds to review the RoundResultModal
+    setTimeout(() => {
+      if (roomManager.getRoom(matchId)) {
+        startNextRound(io, roomManager, matchId);
+      }
+    }, ROUND_RESULT_DISPLAY_MS);
   }
 }
 

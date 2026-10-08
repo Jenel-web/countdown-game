@@ -36,6 +36,7 @@ export interface PlayerRoundData {
   pointsEarned: number;  // Decimal, e.g. 1.0 or 0.7
   pointsRaw: number;     // Integer, e.g. 100 or 70
   totalPoints: number;   // Cumulative match score, e.g. 3.2
+  scoreBreakdown?: string; // e.g. "Exact Target Hit (+1.00 pts)"
 }
 
 export interface RoundResultModalProps {
@@ -272,17 +273,25 @@ export default function RoundResultModal({
                   </div>
                 </div>
 
-                {/* Points Earned */}
-                <div className="mt-auto pt-2 border-t border-outline-variant/20 flex items-center justify-between">
-                  <span className="text-xs text-on-surface-variant">Round Points:</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-sm font-bold text-primary-fixed-dim">
-                      +{player.pointsEarned.toFixed(2)} pts
-                    </span>
-                    <span className="text-[10px] text-on-surface-variant/70 font-mono">
-                      ({player.pointsRaw} raw)
-                    </span>
+                {/* Points Earned & Score Breakdown */}
+                <div className="mt-auto pt-2.5 border-t border-outline-variant/20 flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-on-surface-variant font-medium">Round Points:</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-sm font-bold text-primary-fixed-dim">
+                        +{player.pointsEarned.toFixed(2)} pts
+                      </span>
+                      <span className="text-[10px] text-on-surface-variant/70 font-mono">
+                        ({player.pointsRaw} raw)
+                      </span>
+                    </div>
                   </div>
+                  {player.scoreBreakdown && (
+                    <div className="bg-surface-container-lowest/80 px-2.5 py-1.5 rounded-lg border border-primary-fixed-dim/20 flex items-center gap-1.5 text-[11px] text-primary-fixed-dim font-medium">
+                      <Sparkles className="w-3.5 h-3.5 shrink-0 text-primary-fixed-dim" />
+                      <span className="truncate" title={player.scoreBreakdown}>{player.scoreBreakdown}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -328,17 +337,25 @@ export default function RoundResultModal({
                   </div>
                 </div>
 
-                {/* Points Earned */}
-                <div className="mt-auto pt-2 border-t border-outline-variant/20 flex items-center justify-between">
-                  <span className="text-xs text-on-surface-variant">Round Points:</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-sm font-bold text-secondary">
-                      +{opponent.pointsEarned.toFixed(2)} pts
-                    </span>
-                    <span className="text-[10px] text-on-surface-variant/70 font-mono">
-                      ({opponent.pointsRaw} raw)
-                    </span>
+                {/* Points Earned & Score Breakdown */}
+                <div className="mt-auto pt-2.5 border-t border-outline-variant/20 flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-on-surface-variant font-medium">Round Points:</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-sm font-bold text-secondary">
+                        +{opponent.pointsEarned.toFixed(2)} pts
+                      </span>
+                      <span className="text-[10px] text-on-surface-variant/70 font-mono">
+                        ({opponent.pointsRaw} raw)
+                      </span>
+                    </div>
                   </div>
+                  {opponent.scoreBreakdown && (
+                    <div className="bg-surface-container-lowest/80 px-2.5 py-1.5 rounded-lg border border-secondary/30 flex items-center gap-1.5 text-[11px] text-secondary font-medium">
+                      <Sparkles className="w-3.5 h-3.5 shrink-0 text-secondary" />
+                      <span className="truncate" title={opponent.scoreBreakdown}>{opponent.scoreBreakdown}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

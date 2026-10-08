@@ -71,28 +71,76 @@ export function registerRoomHandlers(
     // socket.join(matchId) with this exact name, without us having to
     // manually track a list of socket IDs ourselves.
     const room = roomManager.createRoom(matchId, matchRow.player1_id);
+    if (matchRow.player2_id && !room.player2Id) {
+      roomManager.joinRoom(matchId, matchRow.player2_id);
+    }
     socket.join(matchId);
     socket.data.matchId = matchId; // remembered for later events on this same connection (submit_answer, disconnect, etc.)
 
     if (isPlayer1) {
       roomManager.setSocketId(matchId, 'player1', socket.id);
 
-      if (!room.player2Id) {
+      const effectivePlayer2Id = room.player2Id || matchRow.player2_id;
+      if (!effectivePlayer2Id) {
         // Player 1 is alone so far — nothing more to do than let them know.
         socket.emit('waiting_for_opponent');
+        return;
       }
-      // (If player2 already exists and player1 is reconnecting, we fall
-      // through without re-emitting opponent_joined here — a fuller
-      // reconnect experience, like re-sending the current round_start
-      // payload so a refreshed page can resume mid-round, is a reasonable
-      // stretch goal for later but is intentionally out of scope for this
-      // first working version.)
+
+      // Second player is already associated with this match!
+      if (!room.player2Id && effectivePlayer2Id) {
+        roomManager.joinRoom(matchId, effectivePlayer2Id);
+      }
+
+      // Only start round 1 if both players have active sockets connected
+      if (room.player1SocketId && room.player2SocketId) {
+        io.to(matchId).emit('opponent_joined', {
+          player1Id: matchRow.player1_id,
+          player2Id: effectivePlayer2Id,
+        });
+
+        if (room.currentRound === 0) {
+          startNextRound(io, roomManager, matchId);
+        }
+      } else if (room.currentRound > 0 && room.startTimestamp) {
+        // Reconnected mid-round — send active round state
+        socket.emit('round_start', {
+          roundNumber: room.currentRound,
+          tiles: room.currentTiles,
+          target: room.currentTarget,
+          startTimestamp: room.startTimestamp,
+          durationMs: 30_000,
+        });
+      } else {
+        socket.emit('waiting_for_opponent');
+      }
       return;
     }
 
     if (isExistingPlayer2) {
       roomManager.setSocketId(matchId, 'player2', socket.id);
-      return; // same reconnect note as above applies here too
+
+      if (room.player1SocketId && room.player2SocketId) {
+        io.to(matchId).emit('opponent_joined', {
+          player1Id: matchRow.player1_id,
+          player2Id: userId,
+        });
+
+        if (room.currentRound === 0) {
+          startNextRound(io, roomManager, matchId);
+        }
+      } else if (room.currentRound > 0 && room.startTimestamp) {
+        socket.emit('round_start', {
+          roundNumber: room.currentRound,
+          tiles: room.currentTiles,
+          target: room.currentTarget,
+          startTimestamp: room.startTimestamp,
+          durationMs: 30_000,
+        });
+      } else {
+        socket.emit('waiting_for_opponent');
+      }
+      return;
     }
 
     // isNewPlayer2 — this is the moment the match actually becomes "real."
@@ -107,34 +155,63 @@ export function registerRoomHandlers(
     if (updateError) {
       console.error(`[match ${matchId}] failed to write player2_id to Supabase:`, updateError);
       // We deliberately continue anyway — the live match can still be
-      // played from memory even if this particular write failed; the
-      // failure is logged loudly so it can be investigated and, if
-      // needed, the row patched up manually afterward.
+      // played from memory even if this particular write failed.
     }
 
-    io.to(matchId).emit('opponent_joined', {
-      player1Id: matchRow.player1_id,
-      player2Id: userId,
-    });
+    if (room.player1SocketId && room.player2SocketId) {
+      io.to(matchId).emit('opponent_joined', {
+        player1Id: matchRow.player1_id,
+        player2Id: userId,
+      });
 
-    // Both players are now present — kick off round 1 immediately.
-    startNextRound(io, roomManager, matchId);
+      // Both players are now present — kick off round 1 immediately.
+      if (room.currentRound === 0) {
+        startNextRound(io, roomManager, matchId);
+      }
+    } else {
+      socket.emit('waiting_for_opponent');
+    }
   });
 
   socket.on('cancel_room', async ({ matchId }) => {
     const room = roomManager.getRoom(matchId);
-    if (!room || room.player1Id !== socket.data.userId || room.player2Id) {
+    const userId = socket.data.userId;
+
+    if (!room) {
+      socket.leave(matchId);
+      socket.data.matchId = undefined;
+      await adminClient.from('matches').delete().eq('id', matchId).eq('player1_id', userId).eq('status', 'pending');
+      await adminClient.from('matches').update({ player2_id: null, status: 'pending' }).eq('id', matchId).eq('player2_id', userId);
       return;
     }
-    roomManager.removeRoom(matchId);
-    socket.leave(matchId);
-    const { error } = await adminClient
-      .from('matches')
-      .delete()
-      .eq('id', matchId)
-      .eq('status', 'pending');
-    if (error) {
-      console.error(`[match ${matchId}] cancel_room DB delete failed:`, error);
+
+    if (room.player1Id === userId) {
+      // Host cancelled the match
+      roomManager.removeRoom(matchId);
+      socket.leave(matchId);
+      socket.data.matchId = undefined;
+      io.to(matchId).emit('error', {
+        code: 'not_found',
+        message: 'The host has cancelled the match.',
+      });
+      const { error } = await adminClient
+        .from('matches')
+        .delete()
+        .eq('id', matchId);
+      if (error) {
+        console.error(`[match ${matchId}] cancel_room DB delete failed:`, error);
+      }
+    } else if (room.player2Id === userId) {
+      // Player 2 decided not to play and backed out of the lobby
+      roomManager.clearPlayer2(matchId);
+      socket.leave(matchId);
+      socket.data.matchId = undefined;
+      await adminClient
+        .from('matches')
+        .update({ player2_id: null, status: 'pending' })
+        .eq('id', matchId);
+      // Notify player 1 to revert to waiting state
+      io.to(matchId).emit('waiting_for_opponent');
     }
   });
 
@@ -193,26 +270,29 @@ export function registerRoomHandlers(
       console.error(`[match ${matchId}] finish_match RPC failed on disconnect forfeit:`, finishError);
     }
 
-    // Update MMR for forfeit resolution
+    // Update MMR ratings AND win/loss records for forfeit resolution.
+    // Winner: mmr +25, wins +1. Loser: mmr -15 (floor 0), losses +1.
     try {
       const { data: profiles } = await adminClient
         .from('profiles')
-        .select('id, mmr')
+        .select('id, mmr, wins, losses')
         .in('id', [remainingPlayerId, disconnectedPlayerId]);
 
       if (profiles) {
         const winnerProf = profiles.find((p) => p.id === remainingPlayerId);
         const loserProf = profiles.find((p) => p.id === disconnectedPlayerId);
-        const winnerNew = (winnerProf?.mmr ?? 1000) + 25;
-        const loserNew = Math.max(0, (loserProf?.mmr ?? 1000) - 15);
+        const winnerNewMmr = (winnerProf?.mmr ?? 1000) + 25;
+        const loserNewMmr = Math.max(0, (loserProf?.mmr ?? 1000) - 15);
+        const winnerNewWins = (winnerProf?.wins ?? 0) + 1;
+        const loserNewLosses = (loserProf?.losses ?? 0) + 1;
 
         await Promise.all([
-          adminClient.from('profiles').update({ mmr: winnerNew }).eq('id', remainingPlayerId),
-          adminClient.from('profiles').update({ mmr: loserNew }).eq('id', disconnectedPlayerId),
+          adminClient.from('profiles').update({ mmr: winnerNewMmr, wins: winnerNewWins }).eq('id', remainingPlayerId),
+          adminClient.from('profiles').update({ mmr: loserNewMmr, losses: loserNewLosses }).eq('id', disconnectedPlayerId),
         ]);
       }
     } catch (mmrErr) {
-      console.error(`[match ${matchId}] failed to update forfeit MMR:`, mmrErr);
+      console.error(`[match ${matchId}] failed to update forfeit MMR/win-loss:`, mmrErr);
     }
   });
 }

@@ -84,6 +84,13 @@ export class RoomManager {
     return room;
   }
 
+  clearPlayer2(matchId: string): void {
+    const room = this.rooms.get(matchId);
+    if (!room) return;
+    room.player2Id = null;
+    room.player2SocketId = null;
+  }
+
   setSocketId(matchId: string, slot: 'player1' | 'player2', socketId: string): void {
     const room = this.rooms.get(matchId);
     if (!room) return;

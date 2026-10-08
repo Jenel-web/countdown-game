@@ -79,8 +79,24 @@ interface HistorySnapshot {
 interface RoundResultPayload {
   roundNumber: number;
   solvable: boolean;
-  player1: { points: number; pointsRaw: number; outcome: 'win' | 'loss' | 'draw' };
-  player2: { points: number; pointsRaw: number; outcome: 'win' | 'loss' | 'draw' };
+  player1: {
+    points: number;
+    pointsRaw: number;
+    outcome: 'win' | 'loss' | 'draw';
+    result?: number | null;
+    timeMs?: number | null;
+    diff?: number | null;
+    reason?: string;
+  };
+  player2: {
+    points: number;
+    pointsRaw: number;
+    outcome: 'win' | 'loss' | 'draw';
+    result?: number | null;
+    timeMs?: number | null;
+    diff?: number | null;
+    reason?: string;
+  };
   player1TotalRaw: number;
   player2TotalRaw: number;
 }
@@ -366,6 +382,23 @@ function MatchBoard({ matchId }: { matchId: string }) {
       if (!user) { router.push('/login'); return; }
       setUserId(user.id);
 
+      // Pre-resolve player slot from match table so HUD and modal outcomes are immediately accurate
+      const { data: matchData } = await supabase
+        .from('matches')
+        .select('player1_id, player2_id')
+        .eq('id', matchId)
+        .maybeSingle();
+
+      if (matchData) {
+        if (user.id === matchData.player1_id) {
+          mySlotRef.current = 'player1';
+          if (matchData.player2_id) setOpponentId(matchData.player2_id);
+        } else if (user.id === matchData.player2_id) {
+          mySlotRef.current = 'player2';
+          if (matchData.player1_id) setOpponentId(matchData.player1_id);
+        }
+      }
+
       // Fetch profile for the HUD
       const { data } = await supabase
         .from('profiles')
@@ -379,7 +412,19 @@ function MatchBoard({ matchId }: { matchId: string }) {
         myPrevMmrRef.current = profile.mmr;
       }
     });
-  }, [router]);
+  }, [matchId, router]);
+
+  // Clean room tear-down if player hits browser Back button
+  useEffect(() => {
+    const handlePopState = () => {
+      cancelRoom(matchId);
+      destroySocket();
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [cancelRoom, matchId]);
 
   // ── Opponent profile (populated from opponent_joined then Supabase) ──────
   const [opponentId, setOpponentId] = useState<string | null>(null);
@@ -409,6 +454,8 @@ function MatchBoard({ matchId }: { matchId: string }) {
   const pendingRoundStartRef = useRef<BufferedRoundStart | null>(null);
   /** Timer ID for the ROUND_RESULT → PREPARING transition. */
   const modalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Synchronous flag indicating whether RoundResultModal is actively showing */
+  const isShowingResultModalRef = useRef(false);
   const matchStartRef = useRef<number>(Date.now());
 
   // ── Phase ────────────────────────────────────────────────────────────────
@@ -429,6 +476,10 @@ function MatchBoard({ matchId }: { matchId: string }) {
   const [roundNumber, setRoundNumber] = useState(0);
   const [revealedCount, setRevealedCount] = useState(0);
   const [prepCountdown, setPrepCountdown] = useState(5);
+  /** Incremented each time a new prep phase starts — forces the countdown effect to re-fire even if prepCountdown value is unchanged */
+  const [prepKey, setPrepKey] = useState(0);
+  /** Stores the server startTimestamp from round_start for use when PLAYING begins */
+  const pendingStartTimestampRef = useRef<number | null>(null);
 
   // ── Scores ────────────────────────────────────────────────────────────────
   const [myTotalRaw, setMyTotalRaw] = useState(0);
@@ -479,6 +530,10 @@ function MatchBoard({ matchId }: { matchId: string }) {
     const payload = pendingRoundStartRef.current;
     if (!payload) return;
     pendingRoundStartRef.current = null;
+    isShowingResultModalRef.current = false;
+
+    // Store the server's startTimestamp for use when PLAYING begins
+    pendingStartTimestampRef.current = payload.startTimestamp;
 
     hasAutoSubmitted.current = false;
     setRoundNumber(payload.roundNumber);
@@ -486,8 +541,11 @@ function MatchBoard({ matchId }: { matchId: string }) {
     setRevealedCount(0);
     setOpponentStatus('thinking');
     resetWorkspace(payload.tiles);
-    timerControls.start(payload.startTimestamp, payload.durationMs);
+    timerControls.reset();
+    // Reset countdown to 5 AND increment prepKey to force the effect to re-run
+    // even if prepCountdown was already 5 (React skips no-op state updates)
     setPrepCountdown(5);
+    setPrepKey(k => k + 1);
     setPhase('PREPARING');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timerControls]);
@@ -613,12 +671,23 @@ function MatchBoard({ matchId }: { matchId: string }) {
   }, [isReconnecting, timerControls]);
 
   // ── PREPARING countdown ───────────────────────────────────────────────────
+  // Uses prepKey to force this effect to re-run even when prepCountdown value
+  // hasn't changed (React skips state updates with the same value, which
+  // caused the countdown to freeze stuck at 5 on round 2+).
   useEffect(() => {
     if (phase !== 'PREPARING') return;
-    if (prepCountdown <= 0) { setPhase('PLAYING'); return; }
+    if (prepCountdown <= 0) {
+      // Start the 30-second gameplay timer at the moment PLAYING begins
+      const ts = pendingStartTimestampRef.current ?? Date.now();
+      setPhase('PLAYING');
+      timerControls.start(ts, 30_000);
+      return;
+    }
     const t = setTimeout(() => setPrepCountdown(c => c - 1), 1000);
     return () => clearTimeout(t);
-  }, [phase, prepCountdown]);
+    // prepKey is included to force re-run when a new round starts
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, prepCountdown, prepKey, timerControls]);
 
   // ── Tile stagger reveal ───────────────────────────────────────────────────
   useEffect(() => {
@@ -656,14 +725,19 @@ function MatchBoard({ matchId }: { matchId: string }) {
 
   const handleOpponentJoined = useCallback((payload: { player1Id: string; player2Id: string }) => {
     if (!userId) return;
-    mySlotRef.current = userId === payload.player1Id ? 'player1' : 'player2';
+    // Only overwrite slot if we haven't already resolved it from the match table
+    if (!mySlotRef.current) {
+      mySlotRef.current = userId === payload.player1Id ? 'player1' : 'player2';
+    }
     const oppId = userId === payload.player1Id ? payload.player2Id : payload.player1Id;
     setOpponentId(oppId);
     showNote('Opponent joined! Get ready…', 'success');
     setWaitingPhase('opponent_joined');
     setTimeout(() => {
-      setPhase('PREPARING');
       matchStartRef.current = Date.now();
+      setPrepCountdown(5);
+      setPrepKey(k => k + 1);
+      setPhase('PREPARING');
     }, 800);
   }, [userId, showNote]);
   useSocketEvent('opponent_joined', handleOpponentJoined);
@@ -672,17 +746,16 @@ function MatchBoard({ matchId }: { matchId: string }) {
    * round_start — BUFFERED while modal is showing, applied immediately otherwise.
    *
    * Flow:
-   *   - If phase === 'ROUND_RESULT' → store payload in ref, let the modal timer
-   *     call applyBufferedRoundStart() when it fires.
+   *   - If phase === 'ROUND_RESULT' or isShowingResultModalRef is true → store payload in ref.
+   *     The payload will be applied when the 5s modal timer fires.
    *   - Otherwise (round 1, or reconnect) → apply immediately.
    */
   const handleRoundStart = useCallback((payload: BufferedRoundStart) => {
     // Always write to the buffer — this way both paths converge to one application point.
     pendingRoundStartRef.current = payload;
 
-    if (phase === 'ROUND_RESULT') {
-      // Modal is already showing and its timer is already running.
-      // The payload will be consumed when that timer fires. Nothing else to do.
+    if (isShowingResultModalRef.current || phase === 'ROUND_RESULT') {
+      // Modal is already showing (or scheduled to show) — let the modal timer consume the buffer.
       return;
     }
 
@@ -700,6 +773,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
   const handleRoundResult = useCallback((payload: RoundResultPayload) => {
     timerControls.reset();
     setLastRoundResult(payload);
+    isShowingResultModalRef.current = true;
 
     const mySlot = mySlotRef.current;
     const myData = mySlot ? payload[mySlot] : payload.player1;
@@ -726,6 +800,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
 
     modalTimerRef.current = setTimeout(() => {
       modalTimerRef.current = null;
+      isShowingResultModalRef.current = false;
       applyBufferedRoundStart();
     }, MODAL_DISPLAY_MS);
   }, [target, timerControls, applyBufferedRoundStart]);
@@ -737,6 +812,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
   const handleMatchOver = useCallback(async (payload: MatchOverPayload) => {
     // Cancel the modal→next-round timer — game is over.
     if (modalTimerRef.current) { clearTimeout(modalTimerRef.current); modalTimerRef.current = null; }
+    isShowingResultModalRef.current = false;
 
     const isWinner = payload.winnerId === userId;
     const expectedDelta = isWinner ? 25 : -15;
@@ -806,9 +882,9 @@ function MatchBoard({ matchId }: { matchId: string }) {
   const handleRematchAccepted = useCallback((payload: { newMatchId: string }) => {
     setRematchState('accepted');
     setTimeout(() => {
-      destroySocket();
+      // Keep existing socket alive across rematch navigation so players don't hang in infinite loading
       router.push(`/match/${payload.newMatchId}`);
-    }, 1200);
+    }, 1000);
   }, [router]);
   useSocketEvent('rematch_accepted', handleRematchAccepted);
 
@@ -822,6 +898,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
 
   const handleOpponentLeft = useCallback(() => {
     if (modalTimerRef.current) { clearTimeout(modalTimerRef.current); modalTimerRef.current = null; }
+    isShowingResultModalRef.current = false;
     timerControls.freeze();
     setPhase('WAITING_LOBBY');
     setWaitingPhase('opponent_left');
@@ -939,31 +1016,37 @@ function MatchBoard({ matchId }: { matchId: string }) {
       </AnimatePresence>
 
       {/* Round Result modal — isOpen driven by phase, auto-closes via modalTimer */}
-      {lastRoundResult && myRoundResult && oppRoundResult && (
+      {lastRoundResult && (
         <RoundResultModal
           isOpen={phase === 'ROUND_RESULT'}
           roundNumber={lastRoundResult.roundNumber}
           target={target}
-          outcome={myRoundResult.outcome}
+          outcome={myRoundResult?.outcome ?? 'draw'}
           player={{
             name: myProfile.email ?? 'You',
-            result: null, diff: null, timeMs: null,
+            result: myRoundResult?.result !== undefined ? myRoundResult.result : (steps[steps.length - 1]?.result ?? null),
+            diff: myRoundResult?.diff !== undefined ? myRoundResult.diff : (steps.length ? Math.abs((steps[steps.length - 1]?.result ?? 0) - target) : null),
+            timeMs: myRoundResult?.timeMs ?? null,
             steps: steps,
-            pointsEarned: myRoundResult.points,
-            pointsRaw: myRoundResult.pointsRaw,
+            pointsEarned: myRoundResult?.points ?? 0,
+            pointsRaw: myRoundResult?.pointsRaw ?? 0,
             totalPoints: myFinalScore,
+            scoreBreakdown: myRoundResult?.reason,
           }}
           opponent={{
             name: opponentProfile.email ?? 'Opponent',
-            result: null, diff: null, timeMs: null,
+            result: oppRoundResult?.result ?? null,
+            diff: oppRoundResult?.diff ?? null,
+            timeMs: oppRoundResult?.timeMs ?? null,
             steps: [],
-            pointsEarned: oppRoundResult.points,
-            pointsRaw: oppRoundResult.pointsRaw,
+            pointsEarned: oppRoundResult?.points ?? 0,
+            pointsRaw: oppRoundResult?.pointsRaw ?? 0,
             totalPoints: oppFinalScore,
+            scoreBreakdown: oppRoundResult?.reason,
           }}
           solvability={{ solvable: lastRoundResult.solvable }}
-          countdownSeconds={modalSecondsLeft}
-          // onNextRound is intentionally a no-op — the 5s timer drives the transition
+          countdownSeconds={MODAL_DISPLAY_MS / 1000}
+          // onNextRound is intentionally a no-op — the page's modalTimerRef drives the transition
           onNextRound={() => {}}
           onClose={() => {}}
         />
@@ -998,6 +1081,8 @@ function MatchBoard({ matchId }: { matchId: string }) {
         onDecline={() => {
           respondRematch(matchId, false);
           setRematchState(null);
+          destroySocket();
+          router.push('/lobby');
         }}
         onCancelRequest={() => {
           setRematchState(null);
@@ -1010,6 +1095,24 @@ function MatchBoard({ matchId }: { matchId: string }) {
           router.push('/lobby');
         }}
       />
+
+      {/* Top back navigation bar */}
+      <div className="w-full max-w-[1440px] mx-auto px-4 pt-3 flex items-center justify-between">
+        <button
+          onClick={() => {
+            cancelRoom(matchId);
+            destroySocket();
+            router.push('/lobby');
+          }}
+          className="flex items-center gap-1.5 text-xs font-mono uppercase tracking-wider text-on-surface-variant hover:text-[#00E5FF] transition-colors py-1.5 px-3 rounded-lg border border-outline-variant/20 hover:border-[#00E5FF]/40 bg-surface-container-low/50"
+        >
+          <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+          <span>Back to Lobby</span>
+        </button>
+        <span className="text-xs font-mono text-on-surface-variant/60">
+          Match ID: <span className="text-on-surface-variant">{matchId.slice(0, 8)}...</span>
+        </span>
+      </div>
 
       {/* ── Main layout — 3-column on lg, stacked on mobile ─────────────────── */}
       <main className="flex-1 w-full max-w-[1440px] mx-auto px-4 py-4 grid grid-cols-1 lg:grid-cols-[280px_1fr_280px] xl:grid-cols-[300px_1fr_300px] gap-6 items-start">
@@ -1240,7 +1343,7 @@ function MatchPageInner() {
   );
   return (
     <AutoGameSocketProvider>
-      <MatchBoard matchId={matchId} />
+      <MatchBoard key={matchId} matchId={matchId} />
     </AutoGameSocketProvider>
   );
 }
