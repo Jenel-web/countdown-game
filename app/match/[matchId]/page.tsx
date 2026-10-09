@@ -186,9 +186,8 @@ function PlayerSidebar({ label, email, wins, losses, mmr, totalRaw, status, isSe
     >
       {/* Background radial highlight */}
       <div
-        className={`absolute top-0 left-1/2 -translate-x-1/2 w-48 h-32 blur-3xl pointer-events-none ${
-          isSelf ? 'bg-[#00E5FF]/10' : 'bg-[#2962FF]/15'
-        }`}
+        className={`absolute top-0 left-1/2 -translate-x-1/2 w-48 h-32 blur-3xl pointer-events-none ${isSelf ? 'bg-[#00E5FF]/10' : 'bg-[#2962FF]/15'
+          }`}
       />
 
       {/* TOP SECTION: Identity & Avatar */}
@@ -204,9 +203,8 @@ function PlayerSidebar({ label, email, wins, losses, mmr, totalRaw, status, isSe
         {/* Scaled Avatar */}
         <div className="relative mb-3 group">
           <div
-            className={`w-24 h-24 sm:w-28 sm:h-28 rounded-full flex items-center justify-center font-black text-3xl sm:text-4xl border-2 ${
-              isSelf ? 'border-[#00E5FF] shadow-[0_0_20px_rgba(0,229,255,0.4)]' : 'border-[#2962FF] shadow-[0_0_20px_rgba(41,98,255,0.3)]'
-            } bg-surface-container-high transition-transform duration-300 group-hover:scale-105`}
+            className={`w-24 h-24 sm:w-28 sm:h-28 rounded-full flex items-center justify-center font-black text-3xl sm:text-4xl border-2 ${isSelf ? 'border-[#00E5FF] shadow-[0_0_20px_rgba(0,229,255,0.4)]' : 'border-[#2962FF] shadow-[0_0_20px_rgba(41,98,255,0.3)]'
+              } bg-surface-container-high transition-transform duration-300 group-hover:scale-105`}
           >
             <span className={accentColor}>{initials}</span>
           </div>
@@ -314,11 +312,10 @@ function PlayerSidebar({ label, email, wins, losses, mmr, totalRaw, status, isSe
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.8 }}
-                  className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider border ${
-                    status === 'submitted'
-                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
-                      : 'bg-surface-container-highest border-outline-variant/30 text-on-surface-variant'
-                  }`}
+                  className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider border ${status === 'submitted'
+                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                    : 'bg-surface-container-highest border-outline-variant/30 text-on-surface-variant'
+                    }`}
                 >
                   {status === 'submitted' ? (
                     <>
@@ -594,8 +591,8 @@ function MatchBoard({ matchId }: { matchId: string }) {
     if (result === null) {
       const msg =
         selectedOp === '\u2212' ? 'Subtraction must produce a positive number.' :
-        selectedOp === '\u00F7' ? 'Division must be exact (no fractions).' :
-        'Invalid operation!';
+          selectedOp === '\u00F7' ? 'Division must be exact (no fractions).' :
+            'Invalid operation!';
       showNote(msg, 'error');
       return;
     }
@@ -671,23 +668,26 @@ function MatchBoard({ matchId }: { matchId: string }) {
   }, [isReconnecting, timerControls]);
 
   // ── PREPARING countdown ───────────────────────────────────────────────────
-  // Uses prepKey to force this effect to re-run even when prepCountdown value
-  // hasn't changed (React skips state updates with the same value, which
-  // caused the countdown to freeze stuck at 5 on round 2+).
+  // timerControls is read through a ref so that a new object identity from
+  // useRoundTimer on every render can't re-run this effect and clear the
+  // pending 1-second tick (which froze the countdown at 5).
+  const timerControlsRef = useRef(timerControls);
+  timerControlsRef.current = timerControls;
+
   useEffect(() => {
     if (phase !== 'PREPARING') return;
     if (prepCountdown <= 0) {
       // Start the 30-second gameplay timer at the moment PLAYING begins
       const ts = pendingStartTimestampRef.current ?? Date.now();
       setPhase('PLAYING');
-      timerControls.start(ts, 30_000);
+      timerControlsRef.current.start(ts, 30_000);
       return;
     }
     const t = setTimeout(() => setPrepCountdown(c => c - 1), 1000);
     return () => clearTimeout(t);
     // prepKey is included to force re-run when a new round starts
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, prepCountdown, prepKey, timerControls]);
+  }, [phase, prepCountdown, prepKey]);
 
   // ── Tile stagger reveal ───────────────────────────────────────────────────
   useEffect(() => {
@@ -733,12 +733,6 @@ function MatchBoard({ matchId }: { matchId: string }) {
     setOpponentId(oppId);
     showNote('Opponent joined! Get ready…', 'success');
     setWaitingPhase('opponent_joined');
-    setTimeout(() => {
-      matchStartRef.current = Date.now();
-      setPrepCountdown(5);
-      setPrepKey(k => k + 1);
-      setPhase('PREPARING');
-    }, 800);
   }, [userId, showNote]);
   useSocketEvent('opponent_joined', handleOpponentJoined);
 
@@ -882,7 +876,10 @@ function MatchBoard({ matchId }: { matchId: string }) {
   const handleRematchAccepted = useCallback((payload: { newMatchId: string }) => {
     setRematchState('accepted');
     setTimeout(() => {
-      // Keep existing socket alive across rematch navigation so players don't hang in infinite loading
+      // Destroy the existing socket so the new match page starts with a fresh
+      // connection. Without this, the socket stays joined to the OLD room and
+      // useJoinRoom never re-fires (isConnected was already true).
+      destroySocket();
       router.push(`/match/${payload.newMatchId}`);
     }, 1000);
   }, [router]);
@@ -962,11 +959,10 @@ function MatchBoard({ matchId }: { matchId: string }) {
         {notification && (
           <motion.div
             initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className={`fixed top-20 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg font-bold text-sm tracking-wider shadow-lg ${
-              notification.type === 'success' ? 'bg-primary-container text-on-primary-container border border-primary-fixed-dim shadow-[0_0_15px_rgba(0,240,255,0.4)]'
+            className={`fixed top-20 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg font-bold text-sm tracking-wider shadow-lg ${notification.type === 'success' ? 'bg-primary-container text-on-primary-container border border-primary-fixed-dim shadow-[0_0_15px_rgba(0,240,255,0.4)]'
               : notification.type === 'info' ? 'bg-surface-container-high text-on-surface border border-outline-variant'
-              : 'bg-error-container text-on-error-container border border-error'
-            }`}
+                : 'bg-error-container text-on-error-container border border-error'
+              }`}
           >
             {notification.msg}
           </motion.div>
@@ -1047,8 +1043,8 @@ function MatchBoard({ matchId }: { matchId: string }) {
           solvability={{ solvable: lastRoundResult.solvable }}
           countdownSeconds={MODAL_DISPLAY_MS / 1000}
           // onNextRound is intentionally a no-op — the page's modalTimerRef drives the transition
-          onNextRound={() => {}}
-          onClose={() => {}}
+          onNextRound={() => { }}
+          onClose={() => { }}
         />
       )}
 
@@ -1164,9 +1160,8 @@ function MatchBoard({ matchId }: { matchId: string }) {
               </span>
             </div>
             <div
-              className={`text-6xl font-black text-primary-container tracking-tighter mb-3 transition-all duration-500 ${
-                phase === 'WAITING_LOBBY' || phase === 'PREPARING' ? 'blur-xl opacity-50' : ''
-              }`}
+              className={`text-6xl font-black text-primary-container tracking-tighter mb-3 transition-all duration-500 ${phase === 'WAITING_LOBBY' || phase === 'PREPARING' ? 'blur-xl opacity-50' : ''
+                }`}
               style={{ textShadow: phase === 'PLAYING' ? '0 0 24px #00F0FF' : undefined }}
             >
               {target || '???'}
@@ -1218,11 +1213,10 @@ function MatchBoard({ matchId }: { matchId: string }) {
                   key={op}
                   onClick={() => handleOp(op)}
                   disabled={phase !== 'PLAYING' || !selectedTile || isReconnecting}
-                  className={`w-13 h-13 w-12 h-12 rounded-xl border font-bold text-xl transition-all disabled:opacity-30 disabled:pointer-events-none ${
-                    selectedOp === op
-                      ? 'bg-primary-container border-primary-fixed-dim text-on-primary-container shadow-[0_0_14px_rgba(0,240,255,0.5)]'
-                      : 'bg-surface-variant/30 border-outline-variant hover:border-primary-fixed-dim hover:text-primary-fixed-dim'
-                  }`}
+                  className={`w-13 h-13 w-12 h-12 rounded-xl border font-bold text-xl transition-all disabled:opacity-30 disabled:pointer-events-none ${selectedOp === op
+                    ? 'bg-primary-container border-primary-fixed-dim text-on-primary-container shadow-[0_0_14px_rgba(0,240,255,0.5)]'
+                    : 'bg-surface-variant/30 border-outline-variant hover:border-primary-fixed-dim hover:text-primary-fixed-dim'
+                    }`}
                 >
                   {op}
                 </button>
@@ -1233,26 +1227,25 @@ function MatchBoard({ matchId }: { matchId: string }) {
             <div className="grid grid-cols-6 gap-2">
               {tiles.length === 0
                 ? Array(6).fill(null).map((_, i) => (
-                    <div key={i} className="aspect-square rounded-xl bg-surface-container-high border border-outline-variant/20 opacity-30" />
-                  ))
+                  <div key={i} className="aspect-square rounded-xl bg-surface-container-high border border-outline-variant/20 opacity-30" />
+                ))
                 : tiles.map((tile, i) => {
-                    const visible = i < revealedCount || phase === 'PLAYING' || phase === 'ROUND_RESULT';
-                    const isSel = selectedTile?.id === tile.id;
-                    return (
-                      <motion.button
-                        key={tile.id} custom={i} variants={tileVariants} initial="hidden" animate={visible ? 'visible' : 'hidden'}
-                        onClick={() => handleTileClick(tile)}
-                        disabled={phase !== 'PLAYING' || tile.used || isReconnecting}
-                        className={`aspect-square rounded-xl border font-bold text-base flex items-center justify-center transition-all ${
-                          tile.used ? 'opacity-25 cursor-not-allowed bg-surface-container-lowest border-outline-variant/10'
-                          : isSel ? 'border-primary bg-surface-container-highest shadow-[0_0_14px_rgba(0,240,255,0.6)] text-primary scale-105'
+                  const visible = i < revealedCount || phase === 'PLAYING' || phase === 'ROUND_RESULT';
+                  const isSel = selectedTile?.id === tile.id;
+                  return (
+                    <motion.button
+                      key={tile.id} custom={i} variants={tileVariants} initial="hidden" animate={visible ? 'visible' : 'hidden'}
+                      onClick={() => handleTileClick(tile)}
+                      disabled={phase !== 'PLAYING' || tile.used || isReconnecting}
+                      className={`aspect-square rounded-xl border font-bold text-base flex items-center justify-center transition-all ${tile.used ? 'opacity-25 cursor-not-allowed bg-surface-container-lowest border-outline-variant/10'
+                        : isSel ? 'border-primary bg-surface-container-highest shadow-[0_0_14px_rgba(0,240,255,0.6)] text-primary scale-105'
                           : 'bg-surface-container-high border-outline-variant/50 hover:border-primary hover:shadow-[0_0_8px_rgba(0,240,255,0.3)] hover:scale-105'
                         }`}
-                      >
-                        {tile.value}
-                      </motion.button>
-                    );
-                  })
+                    >
+                      {tile.value}
+                    </motion.button>
+                  );
+                })
               }
             </div>
 
@@ -1266,10 +1259,9 @@ function MatchBoard({ matchId }: { matchId: string }) {
                     <motion.button
                       key={tile.id} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                       onClick={() => handleTileClick(tile)} disabled={phase !== 'PLAYING' || isReconnecting}
-                      className={`px-4 py-2 rounded-xl border font-bold transition-all ${
-                        isSel ? 'border-primary bg-secondary-container/40 text-primary shadow-[0_0_14px_rgba(0,240,255,0.6)] scale-105'
+                      className={`px-4 py-2 rounded-xl border font-bold transition-all ${isSel ? 'border-primary bg-secondary-container/40 text-primary shadow-[0_0_14px_rgba(0,240,255,0.6)] scale-105'
                         : 'border-secondary/40 bg-secondary-container/20 text-secondary hover:bg-secondary-container/40 hover:scale-105'
-                      }`}
+                        }`}
                     >
                       {tile.value}
                     </motion.button>
