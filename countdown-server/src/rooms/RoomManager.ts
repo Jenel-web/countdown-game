@@ -39,6 +39,12 @@ export interface RoomState {
 
   roundTimer: NodeJS.Timeout | null;
 
+  /** Pending forfeit timers, one per slot. Set on disconnect, cleared on reconnect. */
+  disconnectTimers: {
+    player1?: NodeJS.Timeout;
+    player2?: NodeJS.Timeout;
+  };
+
   submissions: {
     player1?: RoundSubmission;
     player2?: RoundSubmission;
@@ -66,6 +72,7 @@ export class RoomManager {
       currentSolvable: false,
       startTimestamp: null,
       roundTimer: null,
+      disconnectTimers: {},
       submissions: {},
     };
 
@@ -87,6 +94,7 @@ export class RoomManager {
   clearPlayer2(matchId: string): void {
     const room = this.rooms.get(matchId);
     if (!room) return;
+    this.clearDisconnectTimer(matchId, 'player2');
     room.player2Id = null;
     room.player2SocketId = null;
   }
@@ -96,6 +104,44 @@ export class RoomManager {
     if (!room) return;
     if (slot === 'player1') room.player1SocketId = socketId;
     else room.player2SocketId = socketId;
+  }
+
+  /** Marks a slot as having no live socket (used when a player disconnects). */
+  clearSocketId(matchId: string, slot: 'player1' | 'player2'): void {
+    const room = this.rooms.get(matchId);
+    if (!room) return;
+    if (slot === 'player1') room.player1SocketId = null;
+    else room.player2SocketId = null;
+  }
+
+  /** Stores a forfeit timer for a slot, replacing (and cancelling) any existing one. */
+  setDisconnectTimer(
+    matchId: string,
+    slot: 'player1' | 'player2',
+    timer: NodeJS.Timeout
+  ): void {
+    const room = this.rooms.get(matchId);
+    if (!room) {
+      clearTimeout(timer);
+      return;
+    }
+    const existing = room.disconnectTimers[slot];
+    if (existing) clearTimeout(existing);
+    room.disconnectTimers[slot] = timer;
+  }
+
+  /**
+   * Cancels a slot's pending forfeit timer.
+   * Returns true if there WAS one pending (i.e. this is a reconnect).
+   */
+  clearDisconnectTimer(matchId: string, slot: 'player1' | 'player2'): boolean {
+    const room = this.rooms.get(matchId);
+    if (!room) return false;
+    const timer = room.disconnectTimers[slot];
+    if (!timer) return false;
+    clearTimeout(timer);
+    delete room.disconnectTimers[slot];
+    return true;
   }
 
   recordSubmission(
@@ -169,6 +215,8 @@ export class RoomManager {
   removeRoom(matchId: string): void {
     const room = this.rooms.get(matchId);
     if (room?.roundTimer) clearTimeout(room.roundTimer);
+    if (room?.disconnectTimers.player1) clearTimeout(room.disconnectTimers.player1);
+    if (room?.disconnectTimers.player2) clearTimeout(room.disconnectTimers.player2);
     this.rooms.delete(matchId);
   }
 }

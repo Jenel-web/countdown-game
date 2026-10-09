@@ -24,6 +24,92 @@ import type {
 type AppServer = Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 
+/** How long a disconnected player has to come back before they forfeit. */
+const RECONNECT_GRACE_MS = 15_000;
+
+/**
+ * Runs when a disconnected player's grace period expires without them
+ * coming back. This is the old "immediate forfeit" logic, moved here.
+ */
+async function forfeitMatch(
+  io: AppServer,
+  roomManager: RoomManager,
+  matchId: string,
+  disconnectedSlot: 'player1' | 'player2'
+): Promise<void> {
+  const room = roomManager.getRoom(matchId);
+  if (!room) return; // match already ended / cleaned up while we waited
+
+  const remainingSlot = disconnectedSlot === 'player1' ? 'player2' : 'player1';
+
+  // Safety net: if they reconnected, the timer should already have been
+  // cancelled, but never forfeit someone who has a live socket.
+  const disconnectedSocketId =
+    disconnectedSlot === 'player1' ? room.player1SocketId : room.player2SocketId;
+  if (disconnectedSocketId) return;
+
+  const remainingSocketId =
+    remainingSlot === 'player1' ? room.player1SocketId : room.player2SocketId;
+  const remainingPlayerId = remainingSlot === 'player1' ? room.player1Id : room.player2Id;
+  const disconnectedPlayerId = disconnectedSlot === 'player1' ? room.player1Id : room.player2Id;
+
+  if (!remainingPlayerId || !disconnectedPlayerId) {
+    roomManager.removeRoom(matchId);
+    return;
+  }
+
+  // Both players gone: nobody is left to claim the win, so just clean up.
+  if (!remainingSocketId) {
+    console.warn(`[match ${matchId}] both players disconnected; discarding room without a winner.`);
+    roomManager.removeRoom(matchId);
+    return;
+  }
+
+  const winnerScore = remainingSlot === 'player1' ? room.player1TotalRaw : room.player2TotalRaw;
+  const loserScore = remainingSlot === 'player1' ? room.player2TotalRaw : room.player1TotalRaw;
+
+  roomManager.removeRoom(matchId);
+
+  io.to(matchId).emit('opponent_left');
+
+  const { error: finishError } = await adminClient.rpc('finish_match', {
+    p_match_id: matchId,
+    p_winner_id: remainingPlayerId,
+    p_loser_id: disconnectedPlayerId,
+    p_winner_score: winnerScore,
+    p_loser_score: loserScore,
+  });
+
+  if (finishError) {
+    console.error(`[match ${matchId}] finish_match RPC failed on disconnect forfeit:`, finishError);
+  }
+
+  // Update MMR ratings AND win/loss records for forfeit resolution.
+  // Winner: mmr +25, wins +1. Loser: mmr -15 (floor 0), losses +1.
+  try {
+    const { data: profiles } = await adminClient
+      .from('profiles')
+      .select('id, mmr, wins, losses')
+      .in('id', [remainingPlayerId, disconnectedPlayerId]);
+
+    if (profiles) {
+      const winnerProf = profiles.find((p) => p.id === remainingPlayerId);
+      const loserProf = profiles.find((p) => p.id === disconnectedPlayerId);
+      const winnerNewMmr = (winnerProf?.mmr ?? 1000) + 25;
+      const loserNewMmr = Math.max(0, (loserProf?.mmr ?? 1000) - 15);
+      const winnerNewWins = (winnerProf?.wins ?? 0) + 1;
+      const loserNewLosses = (loserProf?.losses ?? 0) + 1;
+
+      await Promise.all([
+        adminClient.from('profiles').update({ mmr: winnerNewMmr, wins: winnerNewWins }).eq('id', remainingPlayerId),
+        adminClient.from('profiles').update({ mmr: loserNewMmr, losses: loserNewLosses }).eq('id', disconnectedPlayerId),
+      ]);
+    }
+  } catch (mmrErr) {
+    console.error(`[match ${matchId}] failed to update forfeit MMR/win-loss:`, mmrErr);
+  }
+}
+
 export function registerRoomHandlers(
   io: AppServer,
   socket: AppSocket,
@@ -76,6 +162,39 @@ export function registerRoomHandlers(
     }
     socket.join(matchId);
     socket.data.matchId = matchId; // remembered for later events on this same connection (submit_answer, disconnect, etc.)
+
+    // ── RECONNECT PATH ─────────────────────────────────────────────────
+    // If this player had a pending forfeit timer, they're coming back
+    // inside the grace period: cancel the timer and resync their client.
+    const returningSlot: 'player1' | 'player2' | null = isPlayer1
+      ? 'player1'
+      : isExistingPlayer2
+        ? 'player2'
+        : null;
+
+    if (returningSlot) {
+      roomManager.setSocketId(matchId, returningSlot, socket.id);
+      const wasPendingForfeit = roomManager.clearDisconnectTimer(matchId, returningSlot);
+
+      if (wasPendingForfeit && room.currentRound > 0 && room.startTimestamp && room.player2Id) {
+        console.log(`[match ${matchId}] ${returningSlot} reconnected within grace period.`);
+
+        // Dismiss the lobby overlay on the returning client...
+        socket.emit('opponent_joined', {
+          player1Id: room.player1Id,
+          player2Id: room.player2Id,
+        });
+        // ...and send them the round that's currently in progress.
+        socket.emit('round_start', {
+          roundNumber: room.currentRound,
+          tiles: room.currentTiles,
+          target: room.currentTarget,
+          startTimestamp: room.startTimestamp,
+          durationMs: 30_000,
+        });
+        return;
+      }
+    }
 
     if (isPlayer1) {
       roomManager.setSocketId(matchId, 'player1', socket.id);
@@ -215,7 +334,7 @@ export function registerRoomHandlers(
     }
   });
 
-  socket.on('disconnect', async () => {
+  socket.on('disconnect', () => {
     const matchId = socket.data.matchId;
     if (!matchId) return; // this socket never joined a room — nothing to clean up
 
@@ -223,7 +342,9 @@ export function registerRoomHandlers(
     if (!room) return; // room was already cleaned up (e.g. match already finished)
 
     const disconnectedSlot = roomManager.getSlotBySocketId(matchId, socket.id);
-    if (!disconnectedSlot) return; // stale socket reference, nothing to do
+    // Stale socket: this slot already has a newer socket (player reconnected
+    // before this old connection's disconnect event arrived) — ignore.
+    if (!disconnectedSlot) return;
 
     const remainingSlot = disconnectedSlot === 'player1' ? 'player2' : 'player1';
     const remainingPlayerId = remainingSlot === 'player1' ? room.player1Id : room.player2Id;
@@ -248,51 +369,19 @@ export function registerRoomHandlers(
       return;
     }
 
-    // Design decision from system planning: a disconnect mid-match is
-    // treated as an immediate forfeit, not a pause. The remaining player
-    // wins outright.
-    const winnerScore = remainingSlot === 'player1' ? room.player1TotalRaw : room.player2TotalRaw;
-    const loserScore = remainingSlot === 'player1' ? room.player2TotalRaw : room.player1TotalRaw;
+    // Two-player match: give the disconnected player a grace period to
+    // reconnect instead of forfeiting them immediately. The opponent is NOT
+    // notified yet; they only see `opponent_left` if the timer expires.
+    roomManager.clearSocketId(matchId, disconnectedSlot);
 
-    roomManager.removeRoom(matchId);
+    console.log(
+      `[match ${matchId}] ${disconnectedSlot} disconnected; ${RECONNECT_GRACE_MS / 1000}s to reconnect.`
+    );
 
-    io.to(matchId).emit('opponent_left');
+    const timer = setTimeout(() => {
+      void forfeitMatch(io, roomManager, matchId, disconnectedSlot);
+    }, RECONNECT_GRACE_MS);
 
-    const { error: finishError } = await adminClient.rpc('finish_match', {
-      p_match_id: matchId,
-      p_winner_id: remainingPlayerId,
-      p_loser_id: disconnectedPlayerId,
-      p_winner_score: winnerScore,
-      p_loser_score: loserScore,
-    });
-
-    if (finishError) {
-      console.error(`[match ${matchId}] finish_match RPC failed on disconnect forfeit:`, finishError);
-    }
-
-    // Update MMR ratings AND win/loss records for forfeit resolution.
-    // Winner: mmr +25, wins +1. Loser: mmr -15 (floor 0), losses +1.
-    try {
-      const { data: profiles } = await adminClient
-        .from('profiles')
-        .select('id, mmr, wins, losses')
-        .in('id', [remainingPlayerId, disconnectedPlayerId]);
-
-      if (profiles) {
-        const winnerProf = profiles.find((p) => p.id === remainingPlayerId);
-        const loserProf = profiles.find((p) => p.id === disconnectedPlayerId);
-        const winnerNewMmr = (winnerProf?.mmr ?? 1000) + 25;
-        const loserNewMmr = Math.max(0, (loserProf?.mmr ?? 1000) - 15);
-        const winnerNewWins = (winnerProf?.wins ?? 0) + 1;
-        const loserNewLosses = (loserProf?.losses ?? 0) + 1;
-
-        await Promise.all([
-          adminClient.from('profiles').update({ mmr: winnerNewMmr, wins: winnerNewWins }).eq('id', remainingPlayerId),
-          adminClient.from('profiles').update({ mmr: loserNewMmr, losses: loserNewLosses }).eq('id', disconnectedPlayerId),
-        ]);
-      }
-    } catch (mmrErr) {
-      console.error(`[match ${matchId}] failed to update forfeit MMR/win-loss:`, mmrErr);
-    }
+    roomManager.setDisconnectTimer(matchId, disconnectedSlot, timer);
   });
 }
