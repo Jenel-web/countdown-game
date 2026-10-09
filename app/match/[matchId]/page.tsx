@@ -87,6 +87,7 @@ interface RoundResultPayload {
     timeMs?: number | null;
     diff?: number | null;
     reason?: string;
+    steps?: Step[];
   };
   player2: {
     points: number;
@@ -96,6 +97,7 @@ interface RoundResultPayload {
     timeMs?: number | null;
     diff?: number | null;
     reason?: string;
+    steps?: Step[];
   };
   player1TotalRaw: number;
   player2TotalRaw: number;
@@ -1023,7 +1025,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
             result: myRoundResult?.result !== undefined ? myRoundResult.result : (steps[steps.length - 1]?.result ?? null),
             diff: myRoundResult?.diff !== undefined ? myRoundResult.diff : (steps.length ? Math.abs((steps[steps.length - 1]?.result ?? 0) - target) : null),
             timeMs: myRoundResult?.timeMs ?? null,
-            steps: steps,
+            steps: myRoundResult?.steps ?? steps,
             pointsEarned: myRoundResult?.points ?? 0,
             pointsRaw: myRoundResult?.pointsRaw ?? 0,
             totalPoints: myFinalScore,
@@ -1034,7 +1036,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
             result: oppRoundResult?.result ?? null,
             diff: oppRoundResult?.diff ?? null,
             timeMs: oppRoundResult?.timeMs ?? null,
-            steps: [],
+            steps: oppRoundResult?.steps ?? [],
             pointsEarned: oppRoundResult?.points ?? 0,
             pointsRaw: oppRoundResult?.pointsRaw ?? 0,
             totalPoints: oppFinalScore,

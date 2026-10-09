@@ -161,12 +161,14 @@ export async function evaluateRound(
       ...scoreResult.player1,
       result: p1sub.result,
       timeMs: p1sub.timeMs,
+      steps: p1sub.steps ?? [],
       diff: p1sub.result !== null ? Math.abs(p1sub.result - room.currentTarget) : null,
     },
     player2: {
       ...scoreResult.player2,
       result: p2sub.result,
       timeMs: p2sub.timeMs,
+      steps: p2sub.steps ?? [],
       diff: p2sub.result !== null ? Math.abs(p2sub.result - room.currentTarget) : null,
     },
     player1TotalRaw: updatedRoom.player1TotalRaw,
@@ -299,7 +301,12 @@ export function registerRoundHandlers(
 
     const submissionResult = valid ? finalValue : null;
 
-    roomManager.recordSubmission(matchId, slot, { result: submissionResult, timeMs });
+    roomManager.recordSubmission(matchId, slot, {
+      result: submissionResult,
+      timeMs,
+      // Only keep steps that passed server-side validation
+      steps: valid ? steps : [],
+    });
 
     // Let the opponent know a submission has landed (cosmetic only).
     socket.to(matchId).emit('player_status', { userId, status: 'submitted' });

@@ -84,6 +84,7 @@ export interface PlayerRoundResult {
   diff?: number | null;
   /** Detailed scoring explanation based on gameEngine rules. */
   reason?: string;
+  steps?: { a: number; op: string; b: number; result: number }[];
 }
 
 // ---------------------------------------------------------------------------
