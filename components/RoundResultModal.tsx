@@ -2,16 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Trophy, 
-  XCircle, 
-  Scale, 
-  Clock, 
-  CheckCircle2, 
-  HelpCircle, 
-  ChevronDown, 
-  ChevronUp, 
-  ArrowRight, 
+import {
+  Trophy,
+  XCircle,
+  Scale,
+  Clock,
+  CheckCircle2,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  ArrowRight,
   Sparkles,
   Zap,
   Target,
@@ -450,8 +450,8 @@ export default function RoundResultModal({
             </div>
           </div>
 
-          {/* Footer Actions & 5-Second Countdown */}
-          <div className="p-4 sm:p-5 bg-surface-container-high/90 border-t border-outline-variant/30 flex flex-col sm:flex-row items-center justify-between gap-3">
+          {/* Footer Actions & 5-Second Countdown (Moved to the Right) */}
+          <div className="p-4 sm:p-5 bg-surface-container-high/90 border-t border-outline-variant/30 flex flex-col sm:flex-row items-center justify-end gap-3">
             {/* Auto-advance Countdown Indicator */}
             <div className="flex items-center gap-2.5 text-xs text-on-surface-variant">
               <div className="relative flex items-center justify-center w-7 h-7">
@@ -494,19 +494,8 @@ export default function RoundResultModal({
                 </button>
               </div>
             </div>
-
-            {/* CTA Buttons */}
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <button
-                type="button"
-                onClick={onNextRound}
-                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-primary-container text-on-primary-container font-bold text-sm uppercase tracking-wider hover:bg-primary transition-all shadow-[0_0_15px_rgba(0,229,255,0.4)] active:scale-95 neon-glow cursor-pointer"
-              >
-                <span>Continue</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
           </div>
+
         </motion.div>
       </div>
     </AnimatePresence>
