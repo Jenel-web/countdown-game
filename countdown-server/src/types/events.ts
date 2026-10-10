@@ -117,6 +117,8 @@ export interface ServerToClientEvents {
     target: number;
     startTimestamp: number;
     durationMs: number;
+    player1TotalRaw?: number;
+    player2TotalRaw?: number;
   }) => void;
 
   /**

@@ -105,6 +105,22 @@ export default function WaitingLobby({ phase, matchUrl, onCancel }: WaitingLobby
     }
   }, [onCancel, router]);
 
+  // Forfeit-win CTA: the server already finished the match, so there is
+  // nothing to cancel. Always get the player to the lobby, even if socket
+  // teardown throws.
+  const handleClaimVictory = useCallback(() => {
+    try {
+      destroySocket();
+    } catch (err) {
+      console.error('[WaitingLobby] destroySocket failed on forfeit exit', err);
+    }
+    try {
+      router.push('/lobby');
+    } catch (err) {
+      console.error('[WaitingLobby] router.push failed, hard redirecting', err);
+      window.location.assign('/lobby');
+    }
+  }, [router]);
   return (
     <>
       {/* ── §2.1 Waiting for Opponent ──────────────────────────────────── */}
@@ -247,7 +263,7 @@ export default function WaitingLobby({ phase, matchUrl, onCancel }: WaitingLobby
               {/* CTA — spec §3.1: "Claim Victory & Continue" */}
               {/* NOTE: server has already called finish_match() — no Supabase call needed */}
               <button
-                onClick={handleLeave}
+                onClick={handleClaimVictory}
                 className="
                   w-full py-3 rounded-xl
                   bg-primary-container text-on-primary-container

@@ -91,6 +91,8 @@ export function startNextRound(io: AppServer, roomManager: RoomManager, matchId:
     target,
     startTimestamp: gameplayStartTimestamp,
     durationMs: ROUND_DURATION_MS,
+    player1TotalRaw: room.player1TotalRaw,
+    player2TotalRaw: room.player2TotalRaw,
   });
 
   const totalRoundDurationMs = ROUND_PREP_MS + ROUND_DURATION_MS;

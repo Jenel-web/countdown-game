@@ -191,6 +191,8 @@ export function registerRoomHandlers(
           target: room.currentTarget,
           startTimestamp: room.startTimestamp,
           durationMs: 30_000,
+          player1TotalRaw: room.player1TotalRaw,
+          player2TotalRaw: room.player2TotalRaw,
         });
         return;
       }
@@ -255,6 +257,8 @@ export function registerRoomHandlers(
           target: room.currentTarget,
           startTimestamp: room.startTimestamp,
           durationMs: 30_000,
+          player1TotalRaw: room.player1TotalRaw,
+          player2TotalRaw: room.player2TotalRaw,
         });
       } else {
         socket.emit('waiting_for_opponent');

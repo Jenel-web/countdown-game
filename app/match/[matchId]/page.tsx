@@ -116,6 +116,9 @@ interface BufferedRoundStart {
   target: number;
   startTimestamp: number;
   durationMs: number;
+  /** Only present on reconnect, so the client can restore the real scores. */
+  player1TotalRaw?: number;
+  player2TotalRaw?: number;
 }
 
 interface ProfileData {
@@ -737,30 +740,32 @@ function MatchBoard({ matchId }: { matchId: string }) {
     setWaitingPhase('opponent_joined');
   }, [userId, showNote]);
   useSocketEvent('opponent_joined', handleOpponentJoined);
-
   /**
-   * round_start — BUFFERED while modal is showing, applied immediately otherwise.
-   *
-   * Flow:
-   *   - If phase === 'ROUND_RESULT' or isShowingResultModalRef is true → store payload in ref.
-   *     The payload will be applied when the 5s modal timer fires.
-   *   - Otherwise (round 1, or reconnect) → apply immediately.
-   */
+     * round_start — buffered ONLY while the round-result modal timer is still
+     * pending; otherwise applied immediately.
+     *
+     * modalTimerRef is a ref that the timer sets to null the moment it fires,
+     * so there is no stale-closure or ordering problem:
+     *   - timer pending  → buffer; the timer will apply it when it fires
+     *   - timer finished / never started (round 1, reconnect, or round_start
+     *     arriving a few ms after the modal timer) → apply right now
+     */
   const handleRoundStart = useCallback((payload: BufferedRoundStart) => {
-    // Always write to the buffer — this way both paths converge to one application point.
-    pendingRoundStartRef.current = payload;
-
-    if (isShowingResultModalRef.current || phase === 'ROUND_RESULT') {
-      // Modal is already showing (or scheduled to show) — let the modal timer consume the buffer.
-      return;
+    // Reconnect: server sends the real running totals, so restore them.
+    if (payload.player1TotalRaw !== undefined && payload.player2TotalRaw !== undefined) {
+      const slot = mySlotRef.current;
+      setMyTotalRaw(slot === 'player2' ? payload.player2TotalRaw : payload.player1TotalRaw);
+      setOpponentTotalRaw(slot === 'player2' ? payload.player1TotalRaw : payload.player2TotalRaw);
     }
 
-    // Round 1 (or unexpected re-emit): apply immediately.
-    applyBufferedRoundStart();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, applyBufferedRoundStart]);
-  useSocketEvent('round_start', handleRoundStart);
+    pendingRoundStartRef.current = payload;
 
+    // Modal countdown still running — let its timer consume the buffer.
+    if (modalTimerRef.current !== null) return;
+
+    applyBufferedRoundStart();
+  }, [applyBufferedRoundStart]);
+  useSocketEvent('round_start', handleRoundStart);
   const handlePlayerStatus = useCallback((payload: { userId: string; status: 'thinking' | 'submitted' }) => {
     setOpponentStatus(payload.status);
   }, []);
@@ -802,7 +807,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
   }, [target, timerControls, applyBufferedRoundStart]);
   useSocketEvent('round_result', handleRoundResult);
 
-  /**
+  /** 
    * match_over — fetch updated profile for MMR delta, compute tier milestone, then show GAME_OVER.
    */
   const handleMatchOver = useCallback(async (payload: MatchOverPayload) => {
