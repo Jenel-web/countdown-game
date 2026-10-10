@@ -91,8 +91,6 @@ export function startNextRound(io: AppServer, roomManager: RoomManager, matchId:
     target,
     startTimestamp: gameplayStartTimestamp,
     durationMs: ROUND_DURATION_MS,
-    player1TotalRaw: room.player1TotalRaw,
-    player2TotalRaw: room.player2TotalRaw,
   });
 
   const totalRoundDurationMs = ROUND_PREP_MS + ROUND_DURATION_MS;
@@ -223,12 +221,10 @@ export async function evaluateRound(
         const loserProf = profiles.find((p) => p.id === loserId);
         const winnerNewMmr = (winnerProf?.mmr ?? 1000) + 25;
         const loserNewMmr = Math.max(0, (loserProf?.mmr ?? 1000) - 15);
-        const winnerNewWins = (winnerProf?.wins ?? 0) + 1;
-        const loserNewLosses = (loserProf?.losses ?? 0) + 1;
 
         await Promise.all([
-          adminClient.from('profiles').update({ mmr: winnerNewMmr, wins: winnerNewWins }).eq('id', winnerId),
-          adminClient.from('profiles').update({ mmr: loserNewMmr, losses: loserNewLosses }).eq('id', loserId),
+          adminClient.from('profiles').update({ mmr: winnerNewMmr }).eq('id', winnerId),
+          adminClient.from('profiles').update({ mmr: loserNewMmr }).eq('id', loserId),
         ]);
       }
     } catch (mmrErr) {

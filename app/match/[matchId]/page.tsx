@@ -1341,7 +1341,7 @@ function MatchPageInner() {
     </div>
   );
   return (
-    <AutoGameSocketProvider>
+    <AutoGameSocketProvider key={matchId}>
       <MatchBoard key={matchId} matchId={matchId} />
     </AutoGameSocketProvider>
   );

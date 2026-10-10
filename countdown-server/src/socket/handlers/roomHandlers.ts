@@ -97,12 +97,10 @@ async function forfeitMatch(
       const loserProf = profiles.find((p) => p.id === disconnectedPlayerId);
       const winnerNewMmr = (winnerProf?.mmr ?? 1000) + 25;
       const loserNewMmr = Math.max(0, (loserProf?.mmr ?? 1000) - 15);
-      const winnerNewWins = (winnerProf?.wins ?? 0) + 1;
-      const loserNewLosses = (loserProf?.losses ?? 0) + 1;
 
       await Promise.all([
-        adminClient.from('profiles').update({ mmr: winnerNewMmr, wins: winnerNewWins }).eq('id', remainingPlayerId),
-        adminClient.from('profiles').update({ mmr: loserNewMmr, losses: loserNewLosses }).eq('id', disconnectedPlayerId),
+        adminClient.from('profiles').update({ mmr: winnerNewMmr }).eq('id', remainingPlayerId),
+        adminClient.from('profiles').update({ mmr: loserNewMmr }).eq('id', disconnectedPlayerId),
       ]);
     }
   } catch (mmrErr) {
@@ -132,7 +130,7 @@ export function registerRoomHandlers(
       return;
     }
 
-    if (matchRow.status === 'finished') {
+    if (matchRow.status === 'finished' || matchRow.status === 'completed') {
       socket.emit('error', { code: 'match_finished', message: 'This match has already ended.' });
       return;
     }

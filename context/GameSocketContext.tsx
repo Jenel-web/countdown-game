@@ -83,9 +83,8 @@ export function GameSocketProvider({ children, token }: GameSocketProviderProps)
   // useRef to keep a stable reference to the socket that never changes
   // across renders. We initialise it once in the ref initialiser and
   // never reassign socketRef.current.
-  const socketRef = useRef<AppSocket>(getSocket(token));
-  const socket = socketRef.current;
-
+  // Lazy initializer: getSocket runs once per provider, not on every render.
+  const [socket] = useState<AppSocket>(() => getSocket(token));
   useEffect(() => {
     // Guard: if the socket is already connected (e.g. hot reload in dev),
     // update state to reflect reality without emitting a second connect.
@@ -190,7 +189,7 @@ export function useGameSocketContext(): GameSocketContextValue {
   if (!ctx) {
     throw new Error(
       'useGameSocketContext must be used inside a <GameSocketProvider>. ' +
-        'Wrap your match page with <GameSocketProvider token={...}>.'
+      'Wrap your match page with <GameSocketProvider token={...}>.'
     );
   }
   return ctx;
