@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Swords, RotateCcw, XCircle, CheckCircle2, Clock, Home, Loader2 } from 'lucide-react';
 
@@ -37,43 +37,42 @@ export default function RematchModal({
   const [secondsLeft, setSecondsLeft] = useState(OFFER_TIMEOUT_SECS);
   const [declinedSecondsLeft, setDeclinedSecondsLeft] = useState(5);
 
+  // Latest callbacks live in refs, so the inline arrow props from the page
+  // can't restart the countdowns on every parent re-render.
+  const onDeclineRef = useRef(onDecline);
+  const onReturnToLobbyRef = useRef(onReturnToLobby);
+  useEffect(() => {
+    onDeclineRef.current = onDecline;
+    onReturnToLobbyRef.current = onReturnToLobby;
+  });
+
   // Auto-decline incoming offer after 30 s if ignored
   useEffect(() => {
     if (state !== 'incoming_offer') return;
     setSecondsLeft(OFFER_TIMEOUT_SECS);
 
-    const timer = setInterval(() => {
-      setSecondsLeft((s) => {
-        if (s <= 1) {
-          clearInterval(timer);
-          onDecline();
-          return 0;
-        }
-        return s - 1;
-      });
-    }, 1000);
+    const tick = setInterval(() => setSecondsLeft((s) => Math.max(0, s - 1)), 1000);
+    const expire = setTimeout(() => onDeclineRef.current(), OFFER_TIMEOUT_SECS * 1000);
 
-    return () => clearInterval(timer);
-  }, [state, onDecline]);
+    return () => {
+      clearInterval(tick);
+      clearTimeout(expire);
+    };
+  }, [state]);
 
-  // Auto-redirect to lobby after 5 s when offer is declined
+  // Auto-redirect to lobby after 5 s when the rematch is unavailable
   useEffect(() => {
     if (state !== 'declined') return;
     setDeclinedSecondsLeft(5);
 
-    const timer = setInterval(() => {
-      setDeclinedSecondsLeft((s) => {
-        if (s <= 1) {
-          clearInterval(timer);
-          onReturnToLobby();
-          return 0;
-        }
-        return s - 1;
-      });
-    }, 1000);
+    const tick = setInterval(() => setDeclinedSecondsLeft((s) => Math.max(0, s - 1)), 1000);
+    const redirect = setTimeout(() => onReturnToLobbyRef.current(), 5000);
 
-    return () => clearInterval(timer);
-  }, [state, onReturnToLobby]);
+    return () => {
+      clearInterval(tick);
+      clearTimeout(redirect);
+    };
+  }, [state]);
 
   if (!state) return null;
 
@@ -182,13 +181,10 @@ export default function RematchModal({
 
               <div className="flex flex-col gap-1">
                 <h2 className="text-xl font-black text-on-surface uppercase tracking-wide">
-                  Rematch Declined
+                  Rematch Unavailable
                 </h2>
                 <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed">
-                  <span className="text-primary-fixed-dim font-bold">{opponentName}</span> refused the rematch invitation.
-                </p>
-                <p className="text-[11px] text-on-surface-variant/70 font-mono mt-1">
-                  Returning to lobby in {declinedSecondsLeft}s...
+                  <span className="text-primary-fixed-dim font-bold">{opponentName}</span> declined, or is no longer available.
                 </p>
               </div>
 

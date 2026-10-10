@@ -46,8 +46,19 @@ export function registerRematchHandlers(
   socket.on('request_rematch', ({ matchId }) => {
     const userId = socket.data.userId;
 
+    // Only a socket that actually played in this match may start a rematch.
+    if (socket.data.matchId !== matchId) return;
+
     // Ignore duplicate requests for the same finished match.
     if (pendingOffers.has(matchId)) return;
+
+    // Opponent already left: tell the requester now instead of leaving
+    // them waiting forever.
+    const roomSockets = io.sockets.adapter.rooms.get(matchId);
+    if (!roomSockets || roomSockets.size < 2) {
+      socket.emit('rematch_declined');
+      return;
+    }
 
     pendingOffers.set(matchId, {
       requesterSocketId: socket.id,
@@ -66,8 +77,18 @@ export function registerRematchHandlers(
   });
 
   socket.on('rematch_response', async ({ matchId, accepted }) => {
+    // Only a player from this match may answer.
+    if (socket.data.matchId !== matchId) return;
+
     const offer = pendingOffers.get(matchId);
-    if (!offer) return; // expired or already handled
+    if (!offer) {
+      // Offer expired or was withdrawn: unblock this player's modal.
+      socket.emit('rematch_declined');
+      return;
+    }
+
+    // The requester can't answer their own offer.
+    if (offer.requesterUserId === socket.data.userId) return;
 
     // Claim synchronously before any await to prevent a second handler
     // from racing in during the DB insert.
@@ -108,6 +129,8 @@ export function registerRematchHandlers(
     for (const [matchId, offer] of pendingOffers.entries()) {
       if (offer.requesterSocketId === socket.id) {
         pendingOffers.delete(matchId);
+        // Requester cancelled or left: free the responder's offer modal.
+        io.to(matchId).emit('rematch_declined');
       } else if (socket.data.matchId === matchId) {
         // The opponent disconnected while a rematch offer was pending for this match
         io.to(offer.requesterSocketId).emit('rematch_declined');
