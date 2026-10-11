@@ -134,7 +134,7 @@ export default function LobbyPage() {
 
   const copyLink = async () => {
     if (!challengeLink) return;
-    await navigator.clipboard.writeText(challengeLink).catch(() => {});
+    await navigator.clipboard.writeText(challengeLink).catch(() => { });
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -207,7 +207,7 @@ export default function LobbyPage() {
 
       {/* Main Content Grid */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-container-margin py-stack-lg grid grid-cols-12 gap-stack-lg items-start">
-        
+
         {/* Left Column: Profile & Stats */}
         <section className="col-span-12 md:col-span-4 flex flex-col gap-stack-lg">
           <div className="glass-panel rounded-xl p-stack-lg flex flex-col items-center text-center gap-stack-md relative overflow-hidden group min-h-[320px] justify-center">
@@ -309,7 +309,7 @@ export default function LobbyPage() {
               </div>
               <h3 className="font-headline-lg-mobile text-headline-lg-mobile text-primary-fixed-dim">Create Challenge Link</h3>
               <p className="font-body-sm text-body-sm text-on-surface-variant flex-1">Generate a unique link to challenge your friends directly.</p>
-              
+
               {!matchId ? (
                 <div className="mt-4">
                   <button
@@ -376,17 +376,37 @@ export default function LobbyPage() {
             </div>
 
             {/* Quick Match */}
-            <button
-              onClick={handleQuickMatch}
-              className="glass-panel rounded-xl p-stack-lg flex flex-col items-center justify-center text-center gap-stack-md group hover:border-[#00E5FF] transition-colors duration-300 relative overflow-hidden text-left"
-            >
+
+            {/* Solo Training / Practice Mode */}
+            <div className="glass-panel rounded-xl p-stack-lg flex flex-col items-center justify-center text-center gap-stack-md group hover:border-[#00E5FF] transition-colors duration-300 relative overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-t from-[#2962FF]/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
               <div className="w-16 h-16 rounded-full bg-[#00E5FF]/10 flex items-center justify-center text-[#00E5FF] mb-2 group-hover:scale-110 transition-transform duration-300 shadow-[0_0_15px_rgba(0,229,255,0.3)]">
-                <span className="material-symbols-outlined" style={{ fontSize: '32px' }}>flash_on</span>
+                <span className="material-symbols-outlined" style={{ fontSize: '32px' }}>
+                  psychology
+                </span>
               </div>
-              <h3 className="font-headline-lg-mobile text-headline-lg-mobile text-on-background group-hover:text-[#00E5FF] transition-colors">Quick Match</h3>
-              <p className="font-body-sm text-body-sm text-on-surface-variant">Find an opponent instantly based on your rating.</p>
-            </button>
+
+              <h3 className="font-headline-lg-mobile text-headline-lg-mobile text-on-background group-hover:text-[#00E5FF] transition-colors">
+                Practice Mode
+              </h3>
+
+              <p className="font-body-sm text-body-sm text-on-surface-variant flex-1">
+                Sharpen your mental math, test strategies,
+                experiment with operators, and solve puzzles at your own pace.
+              </p>
+
+              <button
+                onClick={() => router.push('/game')}
+                className="w-full bg-[#0A192F] border border-[#2962FF] hover:border-[#00E5FF] text-[#00E5FF] hover:bg-[#2962FF]/15 px-4 py-2.5 rounded-lg font-label-caps text-label-caps transition-all duration-200 h-[38px] flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer shadow-[0_0_12px_rgba(0,229,255,0.15)] hover:shadow-[0_0_18px_rgba(0,229,255,0.3)]"
+              >
+                <span className="material-symbols-outlined text-sm">
+                  play_arrow
+                </span>
+                <span>Start Practice Session</span>
+              </button>
+            </div>
+
           </div>
         </section>
       </main>

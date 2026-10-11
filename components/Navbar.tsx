@@ -84,10 +84,10 @@ export default function Navbar() {
                   href={isPlaceholder ? '#' : href}
                   aria-disabled={isPlaceholder}
                   className={`relative flex items-center gap-1.5 rounded-pill px-4 py-1.5 text-sm font-medium transition-all duration-150 ${active
-                      ? 'text-[#00F0FF] bg-surface-high'
-                      : isPlaceholder
-                        ? 'text-on-surface-var/40 cursor-not-allowed'
-                        : 'text-on-surface-var hover:text-on-surface hover:bg-surface-high/60'
+                    ? 'text-[#00F0FF] bg-surface-high'
+                    : isPlaceholder
+                      ? 'text-on-surface-var/40 cursor-not-allowed'
+                      : 'text-on-surface-var hover:text-on-surface hover:bg-surface-high/60'
                     }`}
                   style={active ? { textShadow: '0 0 8px #00F0FF, 0 0 20px rgba(0,240,255,0.4)' } : {}}
                   onClick={isPlaceholder ? e => e.preventDefault() : undefined}
