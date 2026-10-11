@@ -8,10 +8,9 @@ import { createClient } from '@/lib/supabase/client';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 const navLinks = [
-  { href: '/lobby',    label: 'Arena',    icon: Swords,    match: ['/lobby', '/game'] },
-  { href: '/training', label: 'Training', icon: Dumbbell,  match: ['/training'] },
-  { href: '/rankings', label: 'Rankings', icon: Trophy,    match: ['/rankings'] },
-  { href: '/history',  label: 'History',  icon: Clock,     match: ['/history'] },
+  { href: '/lobby', label: 'Arena', icon: Swords, match: ['/lobby', '/game'] },
+  { href: '/training', label: 'Training', icon: Dumbbell, match: ['/training'] },
+  { href: '/history', label: 'History', icon: Clock, match: ['/history'] },
 ];
 
 export default function Navbar() {
@@ -84,13 +83,12 @@ export default function Navbar() {
                   key={href}
                   href={isPlaceholder ? '#' : href}
                   aria-disabled={isPlaceholder}
-                  className={`relative flex items-center gap-1.5 rounded-pill px-4 py-1.5 text-sm font-medium transition-all duration-150 ${
-                    active
+                  className={`relative flex items-center gap-1.5 rounded-pill px-4 py-1.5 text-sm font-medium transition-all duration-150 ${active
                       ? 'text-[#00F0FF] bg-surface-high'
                       : isPlaceholder
-                      ? 'text-on-surface-var/40 cursor-not-allowed'
-                      : 'text-on-surface-var hover:text-on-surface hover:bg-surface-high/60'
-                  }`}
+                        ? 'text-on-surface-var/40 cursor-not-allowed'
+                        : 'text-on-surface-var hover:text-on-surface hover:bg-surface-high/60'
+                    }`}
                   style={active ? { textShadow: '0 0 8px #00F0FF, 0 0 20px rgba(0,240,255,0.4)' } : {}}
                   onClick={isPlaceholder ? e => e.preventDefault() : undefined}
                 >
