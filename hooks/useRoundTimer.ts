@@ -35,7 +35,7 @@
  *   their timer still shows the pre-disconnect value.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 // --------------------------------------------------------------------------
 // Types
@@ -217,7 +217,7 @@ export function useRoundTimer(): [RoundTimerState, RoundTimerControls] {
     isFrozenRef.current = true;
     // Immediately reflect the frozen state in the UI — do not wait for
     // the next tick to update isFrozen.
-    setTimerState((prev) => ({ ...prev, isFrozen: true }));
+    setTimerState((prev) => (prev.isFrozen ? prev : { ...prev, isFrozen: true }));
   }, []);
 
   const unfreeze = useCallback(() => {
@@ -225,7 +225,7 @@ export function useRoundTimer(): [RoundTimerState, RoundTimerControls] {
     // Resume ticking by running an immediate tick. The interval is still
     // running (freeze doesn't stop it), so the next tick will fire naturally.
     tick();
-    setTimerState((prev) => ({ ...prev, isFrozen: false }));
+    setTimerState((prev) => (!prev.isFrozen ? prev : { ...prev, isFrozen: false }));
   }, [tick]);
 
   const reset = useCallback(() => {
@@ -252,7 +252,10 @@ export function useRoundTimer(): [RoundTimerState, RoundTimerControls] {
 
   // ── Return ────────────────────────────────────────────────────────────────
 
-  const controls: RoundTimerControls = { start, freeze, unfreeze, reset };
+  const controls = useMemo<RoundTimerControls>(
+    () => ({ start, freeze, unfreeze, reset }),
+    [start, freeze, unfreeze, reset]
+  );
   return [timerState, controls];
 }
 
