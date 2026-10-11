@@ -887,9 +887,9 @@ function MatchBoard({ matchId }: { matchId: string }) {
       // connection. Without this, the socket stays joined to the OLD room and
       // useJoinRoom never re-fires (isConnected was already true).
       destroySocket();
-      router.push(`/match/${payload.newMatchId}`);
+      window.location.assign(`/match/${payload.newMatchId}`);
     }, 1000);
-  }, [router]);
+  }, []);
   useSocketEvent('rematch_accepted', handleRematchAccepted);
 
   const handleRematchDeclined = useCallback(() => {
