@@ -13,9 +13,21 @@
 
 import type { Tile } from '../types/events';
 
+
+//records the step that the players have
+export interface SubmissionStep {
+  a: number;
+  op: string;
+  b: number;
+  result: number;
+}
+
+
 export interface RoundSubmission {
   result: number | null;
   timeMs: number | null;
+  /** Validated steps the player took (empty if invalid or no submission). */
+  steps?: SubmissionStep[];
 }
 
 export interface RoomState {

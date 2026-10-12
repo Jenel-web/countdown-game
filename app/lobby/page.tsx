@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Navbar from '@/components/Navbar';
-import { createClient } from '@/lib/supabase/client';
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Navbar from "@/components/Navbar";
+import { createClient } from "@/lib/supabase/client";
 
 export interface Profile {
   id: string;
@@ -24,10 +24,10 @@ export default function LobbyPage() {
   const [isCreatingMatch, setIsCreatingMatch] = useState<boolean>(false);
 
   const challengeLink = matchId
-    ? typeof window !== 'undefined'
+    ? typeof window !== "undefined"
       ? `${window.location.origin}/match/${matchId}`
       : `/match/${matchId}`
-    : '';
+    : "";
 
   useEffect(() => {
     const supabase = createClient();
@@ -39,17 +39,20 @@ export default function LobbyPage() {
         setError(null);
 
         // 1. Get logged in auth user
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
 
         if (authError || !user) {
-          throw new Error(authError?.message || 'No active session found.');
+          throw new Error(authError?.message || "No active session found.");
         }
 
         // 2. Query matching profile row from database
         const { data, error: dbError } = await supabase
-          .from('profiles')
-          .select('id, email, wins, losses, mmr')
-          .eq('id', user.id)
+          .from("profiles")
+          .select("id, email, wins, losses, mmr")
+          .eq("id", user.id)
           .maybeSingle();
 
         if (dbError) {
@@ -59,7 +62,7 @@ export default function LobbyPage() {
         if (isMounted) {
           setProfile({
             id: user.id,
-            email: data?.email || user.email || 'Operative',
+            email: data?.email || user.email || "Operative",
             wins: data?.wins ?? 0,
             losses: data?.losses ?? 0,
             mmr: data?.mmr ?? 1000,
@@ -67,7 +70,7 @@ export default function LobbyPage() {
         }
       } catch (err: any) {
         if (isMounted) {
-          setError(err.message || 'Failed to load user profile.');
+          setError(err.message || "Failed to load user profile.");
         }
       } finally {
         if (isMounted) {
@@ -91,29 +94,34 @@ export default function LobbyPage() {
       const supabase = createClient();
 
       // 1. Get the current authenticated user — player1_id must be their real UUID
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
       if (authError || !user) {
-        setError('You must be logged in to create a match.');
+        setError("You must be logged in to create a match.");
         return;
       }
 
       // 2. Insert the real match row — this is what the socket server looks up
       //    on join_room. Without this row, the server returns error: not_found.
       const { data, error: insertError } = await supabase
-        .from('matches')
-        .insert({ player1_id: user.id, status: 'pending' })
-        .select('id')
+        .from("matches")
+        .insert({ player1_id: user.id, status: "pending" })
+        .select("id")
         .single();
 
       if (insertError || !data?.id) {
-        setError(insertError?.message ?? 'Failed to create match. Please try again.');
+        setError(
+          insertError?.message ?? "Failed to create match. Please try again."
+        );
         return;
       }
 
       // Set matchId so user can share link and cancel or enter room
       setMatchId(data.id);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unexpected error.');
+      setError(err instanceof Error ? err.message : "Unexpected error.");
     } finally {
       setIsCreatingMatch(false);
     }
@@ -123,9 +131,13 @@ export default function LobbyPage() {
     if (!matchId) return;
     try {
       const supabase = createClient();
-      await supabase.from('matches').delete().eq('id', matchId).eq('status', 'pending');
+      await supabase
+        .from("matches")
+        .delete()
+        .eq("id", matchId)
+        .eq("status", "pending");
     } catch (err) {
-      console.error('Failed to delete pending match on cancel:', err);
+      console.error("Failed to delete pending match on cancel:", err);
     } finally {
       setMatchId(null);
       setCopied(false);
@@ -148,35 +160,38 @@ export default function LobbyPage() {
     const interval = setInterval(async () => {
       try {
         const { data } = await supabase
-          .from('matches')
-          .select('player2_id, status')
-          .eq('id', matchId)
+          .from("matches")
+          .select("player2_id, status")
+          .eq("id", matchId)
           .maybeSingle();
 
         if (!isMounted) return;
-        if (data && (data.player2_id || data.status === 'active')) {
+        if (data && (data.player2_id || data.status === "active")) {
           clearInterval(interval);
           router.push(`/match/${matchId}`);
         }
       } catch (err) {
-        console.error('Error polling match presence:', err);
+        console.error("Error polling match presence:", err);
       }
     }, 1200);
 
     const channel = supabase
       .channel(`lobby_match_${matchId}`)
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'matches',
+          event: "UPDATE",
+          schema: "public",
+          table: "matches",
           filter: `id=eq.${matchId}`,
         },
         (payload) => {
           if (!isMounted) return;
-          const row = payload.new as { player2_id?: string | null; status?: string };
-          if (row && (row.player2_id || row.status === 'active')) {
+          const row = payload.new as {
+            player2_id?: string | null;
+            status?: string;
+          };
+          if (row && (row.player2_id || row.status === "active")) {
             clearInterval(interval);
             router.push(`/match/${matchId}`);
           }
@@ -185,20 +200,24 @@ export default function LobbyPage() {
       .subscribe();
 
     const handleBeforeUnload = () => {
-      supabase.from('matches').delete().eq('id', matchId).eq('status', 'pending');
+      supabase
+        .from("matches")
+        .delete()
+        .eq("id", matchId)
+        .eq("status", "pending");
     };
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener("beforeunload", handleBeforeUnload);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
       supabase.removeChannel(channel);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [matchId, router]);
 
   const handleQuickMatch = () => {
-    router.push('/game');
+    router.push("/game");
   };
 
   return (
@@ -207,7 +226,6 @@ export default function LobbyPage() {
 
       {/* Main Content Grid */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-container-margin py-stack-lg grid grid-cols-12 gap-stack-lg items-start">
-
         {/* Left Column: Profile & Stats */}
         <section className="col-span-12 md:col-span-4 flex flex-col gap-stack-lg">
           <div className="glass-panel rounded-xl p-stack-lg flex flex-col items-center text-center gap-stack-md relative overflow-hidden group min-h-[320px] justify-center">
@@ -226,8 +244,12 @@ export default function LobbyPage() {
               </div>
             ) : error || !profile ? (
               <div className="flex flex-col items-center gap-2 py-8">
-                <span className="material-symbols-outlined text-error text-3xl">warning</span>
-                <p className="text-error text-xs font-mono">{error || 'Unable to load profile'}</p>
+                <span className="material-symbols-outlined text-error text-3xl">
+                  warning
+                </span>
+                <p className="text-error text-xs font-mono">
+                  {error || "Unable to load profile"}
+                </p>
               </div>
             ) : (
               <>
@@ -237,7 +259,10 @@ export default function LobbyPage() {
                   src="https://lh3.googleusercontent.com/aida-public/AB6AXuDv8oDesXLp1UIJV2DIeJWgDv1n4zvKk7w44ohmHuPw6X8flTD44Ruhn_gBkN91yZvtfk4y0Rnd3IC-hS8ObYF1-f2a8asAE2ygLh3pvBtct3RvpWtuJqrTRiuMsfkpgZT_YEOoiHM-b-pQiaOjHa3ZS83enjOl-_CQxHCq1NaUsgQS1qXBpEdNIPDGxXd4sY4J8Vgr4ruklhwJE6mhkPvw7mgos5X6g2Jnn5KSjyY6m9630jXuhXGUHg"
                 />
                 <div>
-                  <h1 className="font-headline-lg text-lg sm:text-headline-lg text-primary font-bold truncate max-w-[240px]" title={profile.email || ''}>
+                  <h1
+                    className="font-headline-lg text-lg sm:text-headline-lg text-primary font-bold truncate max-w-[240px]"
+                    title={profile.email || ""}
+                  >
                     {profile.email}
                   </h1>
                   <span className="font-label-caps text-label-caps text-on-surface-variant mt-1 inline-block px-3 py-1 bg-surface-container rounded-full">
@@ -246,19 +271,25 @@ export default function LobbyPage() {
                 </div>
                 <div className="w-full grid grid-cols-3 gap-base mt-4 pt-4 border-t border-outline-variant/15">
                   <div className="flex flex-col items-center">
-                    <span className="font-label-caps text-label-caps text-on-surface-variant">Wins</span>
+                    <span className="font-label-caps text-label-caps text-on-surface-variant">
+                      Wins
+                    </span>
                     <span className="font-mono-metric text-mono-metric text-primary-fixed-dim mt-1">
                       {profile.wins}
                     </span>
                   </div>
                   <div className="flex flex-col items-center border-l border-r border-outline-variant/15">
-                    <span className="font-label-caps text-label-caps text-on-surface-variant">Losses</span>
+                    <span className="font-label-caps text-label-caps text-on-surface-variant">
+                      Losses
+                    </span>
                     <span className="font-mono-metric text-mono-metric text-on-background mt-1">
                       {profile.losses}
                     </span>
                   </div>
                   <div className="flex flex-col items-center">
-                    <span className="font-label-caps text-label-caps text-on-surface-variant">MMR</span>
+                    <span className="font-label-caps text-label-caps text-on-surface-variant">
+                      MMR
+                    </span>
                     <span className="font-mono-metric text-mono-metric text-primary-container mt-1 font-bold">
                       {profile.mmr}
                     </span>
@@ -274,13 +305,22 @@ export default function LobbyPage() {
           {/* Game Mode Config */}
           <div className="glass-panel rounded-xl p-stack-lg">
             <div className="flex items-center gap-base mb-stack-md">
-              <span className="material-symbols-outlined text-primary-fixed-dim">tune</span>
-              <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-background">Game Configuration</h2>
+              <span className="material-symbols-outlined text-primary-fixed-dim">
+                tune
+              </span>
+              <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-background">
+                Game Configuration
+              </h2>
             </div>
             <div className="bg-surface-container-low rounded-lg p-stack-md border border-outline-variant/20 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-stack-md">
               <div>
-                <h3 className="font-body-md text-body-md text-on-background mb-1">Large Numbers</h3>
-                <p className="font-body-sm text-body-sm text-on-surface-variant">Select how many large numbers (25, 50, 75, 100) are in the pool.</p>
+                <h3 className="font-body-md text-body-md text-on-background mb-1">
+                  Large Numbers
+                </h3>
+                <p className="font-body-sm text-body-sm text-on-surface-variant">
+                  Select how many large numbers (25, 50, 75, 100) are in the
+                  pool.
+                </p>
               </div>
               <div className="flex items-center bg-background rounded-full border border-outline-variant/30 p-1">
                 <button
@@ -289,7 +329,9 @@ export default function LobbyPage() {
                 >
                   <span className="material-symbols-outlined">remove</span>
                 </button>
-                <span className="font-mono-metric text-mono-metric text-primary-fixed-dim w-12 text-center">{largeCount}</span>
+                <span className="font-mono-metric text-mono-metric text-primary-fixed-dim w-12 text-center">
+                  {largeCount}
+                </span>
                 <button
                   onClick={() => setLargeCount((c) => Math.min(4, c + 1))}
                   className="w-10 h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary hover:bg-surface-variant/30 transition-colors"
@@ -307,8 +349,12 @@ export default function LobbyPage() {
               <div className="w-12 h-12 rounded-full bg-secondary-container/20 flex items-center justify-center text-secondary mb-2">
                 <span className="material-symbols-outlined">share</span>
               </div>
-              <h3 className="font-headline-lg-mobile text-headline-lg-mobile text-primary-fixed-dim">Create Challenge Link</h3>
-              <p className="font-body-sm text-body-sm text-on-surface-variant flex-1">Generate a unique link to challenge your friends directly.</p>
+              <h3 className="font-headline-lg-mobile text-headline-lg-mobile text-primary-fixed-dim">
+                Create Challenge Link
+              </h3>
+              <p className="font-body-sm text-body-sm text-on-surface-variant flex-1">
+                Generate a unique link to challenge your friends directly.
+              </p>
 
               {!matchId ? (
                 <div className="mt-4">
@@ -319,12 +365,16 @@ export default function LobbyPage() {
                   >
                     {isCreatingMatch ? (
                       <>
-                        <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
+                        <span className="material-symbols-outlined animate-spin text-sm">
+                          progress_activity
+                        </span>
                         <span>Creating Match...</span>
                       </>
                     ) : (
                       <>
-                        <span className="material-symbols-outlined text-sm">add_link</span>
+                        <span className="material-symbols-outlined text-sm">
+                          add_link
+                        </span>
                         <span>Create Challenge Link</span>
                       </>
                     )}
@@ -343,7 +393,7 @@ export default function LobbyPage() {
                       onClick={copyLink}
                       className="bg-[#0A192F] border border-[#2962FF] border-l-0 text-[#00E5FF] px-4 py-2 rounded-r-lg font-label-caps text-label-caps hover:bg-[#2962FF]/10 transition-colors h-[38px] flex items-center justify-center min-w-[90px]"
                     >
-                      {copied ? 'Copied!' : 'Copy Link'}
+                      {copied ? "Copied!" : "Copy Link"}
                     </button>
                   </div>
                   <div className="flex items-center gap-2 pt-1">
@@ -360,14 +410,18 @@ export default function LobbyPage() {
                       onClick={handleCancelChallenge}
                       className="py-2 px-3 rounded-lg border border-outline-variant/40 hover:border-error hover:text-error text-on-surface-variant text-xs font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1"
                     >
-                      <span className="material-symbols-outlined text-[15px]">close</span>
+                      <span className="material-symbols-outlined text-[15px]">
+                        close
+                      </span>
                       Cancel Link
                     </button>
                     <button
                       onClick={() => router.push(`/match/${matchId}`)}
                       className="py-2 px-3 rounded-lg bg-primary-container text-on-primary-container hover:bg-primary text-xs font-bold uppercase tracking-wider transition-all neon-glow flex items-center justify-center gap-1"
                     >
-                      <span className="material-symbols-outlined text-[15px]">swords</span>
+                      <span className="material-symbols-outlined text-[15px]">
+                        swords
+                      </span>
                       Enter Arena
                     </button>
                   </div>
@@ -378,35 +432,31 @@ export default function LobbyPage() {
             {/* Quick Match */}
 
             {/* Solo Training / Practice Mode */}
-            <div className="glass-panel rounded-xl p-stack-lg flex flex-col items-center justify-center text-center gap-stack-md group hover:border-[#00E5FF] transition-colors duration-300 relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-t from-[#2962FF]/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-
-              <div className="w-16 h-16 rounded-full bg-[#00E5FF]/10 flex items-center justify-center text-[#00E5FF] mb-2 group-hover:scale-110 transition-transform duration-300 shadow-[0_0_15px_rgba(0,229,255,0.3)]">
-                <span className="material-symbols-outlined" style={{ fontSize: '32px' }}>
-                  psychology
-                </span>
+            {/* Solo Training / Practice Mode */}
+            <div className="glass-panel rounded-xl p-stack-lg flex flex-col gap-stack-md hover:-translate-y-1 transition-transform duration-300">
+              <div className="w-12 h-12 rounded-full bg-secondary-container/20 flex items-center justify-center text-secondary mb-2">
+                <span className="material-symbols-outlined">psychology</span>
               </div>
-
-              <h3 className="font-headline-lg-mobile text-headline-lg-mobile text-on-background group-hover:text-[#00E5FF] transition-colors">
+              <h3 className="font-headline-lg-mobile text-headline-lg-mobile text-primary-fixed-dim">
                 Practice Mode
               </h3>
-
               <p className="font-body-sm text-body-sm text-on-surface-variant flex-1">
-                Sharpen your mental math, test strategies,
-                experiment with operators, and solve puzzles at your own pace.
+                Sharpen your mental math, test strategies, experiment with
+                operators, and solve puzzles at your own pace.
               </p>
 
-              <button
-                onClick={() => router.push('/game')}
-                className="w-full bg-[#0A192F] border border-[#2962FF] hover:border-[#00E5FF] text-[#00E5FF] hover:bg-[#2962FF]/15 px-4 py-2.5 rounded-lg font-label-caps text-label-caps transition-all duration-200 h-[38px] flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer shadow-[0_0_12px_rgba(0,229,255,0.15)] hover:shadow-[0_0_18px_rgba(0,229,255,0.3)]"
-              >
-                <span className="material-symbols-outlined text-sm">
-                  play_arrow
-                </span>
-                <span>Start Practice Session</span>
-              </button>
+              <div className="mt-4">
+                <button
+                  onClick={() => router.push("/game")}
+                  className="w-full bg-[#0A192F] border border-[#2962FF] hover:border-[#00E5FF] text-[#00E5FF] hover:bg-[#2962FF]/15 px-4 py-2.5 rounded-lg font-label-caps text-label-caps transition-all duration-200 h-[38px] flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_12px_rgba(0,229,255,0.15)] hover:shadow-[0_0_18px_rgba(0,229,255,0.3)]"
+                >
+                  <span className="material-symbols-outlined text-sm">
+                    play_arrow
+                  </span>
+                  <span>Start Practice Session</span>
+                </button>
+              </div>
             </div>
-
           </div>
         </section>
       </main>
