@@ -253,11 +253,14 @@ export default function LobbyPage() {
               </div>
             ) : (
               <>
-                <img
-                  alt={`${profile.email}'s Avatar`}
-                  className="w-28 h-28 rounded-full border-2 border-primary-container object-cover mb-2 shadow-[0_0_15px_rgba(0,229,255,0.2)]"
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuDv8oDesXLp1UIJV2DIeJWgDv1n4zvKk7w44ohmHuPw6X8flTD44Ruhn_gBkN91yZvtfk4y0Rnd3IC-hS8ObYF1-f2a8asAE2ygLh3pvBtct3RvpWtuJqrTRiuMsfkpgZT_YEOoiHM-b-pQiaOjHa3ZS83enjOl-_CQxHCq1NaUsgQS1qXBpEdNIPDGxXd4sY4J8Vgr4ruklhwJE6mhkPvw7mgos5X6g2Jnn5KSjyY6m9630jXuhXGUHg"
-                />
+                <div
+                  aria-label={`${profile.email}'s Avatar`}
+                  className="w-28 h-28 rounded-full border-2 border-primary-container bg-surface-container flex items-center justify-center mb-2 shadow-[0_0_15px_rgba(0,229,255,0.2)] select-none"
+                >
+                  <span className="font-headline-lg text-5xl font-bold text-primary-container">
+                    {profile.email?.charAt(0).toUpperCase()}
+                  </span>
+                </div>
                 <div>
                   <h1
                     className="font-headline-lg text-lg sm:text-headline-lg text-primary font-bold truncate max-w-[240px]"
@@ -303,44 +306,7 @@ export default function LobbyPage() {
         {/* Right Column: Config & Actions */}
         <section className="col-span-12 md:col-span-8 flex flex-col gap-stack-lg">
           {/* Game Mode Config */}
-          <div className="glass-panel rounded-xl p-stack-lg">
-            <div className="flex items-center gap-base mb-stack-md">
-              <span className="material-symbols-outlined text-primary-fixed-dim">
-                tune
-              </span>
-              <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-background">
-                Game Configuration
-              </h2>
-            </div>
-            <div className="bg-surface-container-low rounded-lg p-stack-md border border-outline-variant/20 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-stack-md">
-              <div>
-                <h3 className="font-body-md text-body-md text-on-background mb-1">
-                  Large Numbers
-                </h3>
-                <p className="font-body-sm text-body-sm text-on-surface-variant">
-                  Select how many large numbers (25, 50, 75, 100) are in the
-                  pool.
-                </p>
-              </div>
-              <div className="flex items-center bg-background rounded-full border border-outline-variant/30 p-1">
-                <button
-                  onClick={() => setLargeCount((c) => Math.max(0, c - 1))}
-                  className="w-10 h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary hover:bg-surface-variant/30 transition-colors"
-                >
-                  <span className="material-symbols-outlined">remove</span>
-                </button>
-                <span className="font-mono-metric text-mono-metric text-primary-fixed-dim w-12 text-center">
-                  {largeCount}
-                </span>
-                <button
-                  onClick={() => setLargeCount((c) => Math.min(4, c + 1))}
-                  className="w-10 h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary hover:bg-surface-variant/30 transition-colors"
-                >
-                  <span className="material-symbols-outlined">add</span>
-                </button>
-              </div>
-            </div>
-          </div>
+
 
           {/* CTAs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-stack-lg">
@@ -429,9 +395,6 @@ export default function LobbyPage() {
               )}
             </div>
 
-            {/* Quick Match */}
-
-            {/* Solo Training / Practice Mode */}
             {/* Solo Training / Practice Mode */}
             <div className="glass-panel rounded-xl p-stack-lg flex flex-col gap-stack-md hover:-translate-y-1 transition-transform duration-300">
               <div className="w-12 h-12 rounded-full bg-secondary-container/20 flex items-center justify-center text-secondary mb-2">
@@ -447,7 +410,7 @@ export default function LobbyPage() {
 
               <div className="mt-4">
                 <button
-                  onClick={() => router.push("/game")}
+                  onClick={() => router.push("/training")}
                   className="w-full bg-[#0A192F] border border-[#2962FF] hover:border-[#00E5FF] text-[#00E5FF] hover:bg-[#2962FF]/15 px-4 py-2.5 rounded-lg font-label-caps text-label-caps transition-all duration-200 h-[38px] flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_12px_rgba(0,229,255,0.15)] hover:shadow-[0_0_18px_rgba(0,229,255,0.3)]"
                 >
                   <span className="material-symbols-outlined text-sm">
