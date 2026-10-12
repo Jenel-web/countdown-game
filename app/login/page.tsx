@@ -35,7 +35,7 @@ function LoginForm() {
       setError(authError.message);
       return;
     }
-    router.push('/lobby');
+    window.location.href = '/lobby';
   };
 
   return (
