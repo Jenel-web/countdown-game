@@ -7,7 +7,7 @@ import { generateTilePool, generateTarget, applyOp, findBestSolution, Tile, Step
 import type { BestSolution } from '@/lib/gameEngine';
 import { evaluatePractice } from '@/lib/practiceFeedback';
 import type { PracticeFeedback } from '@/lib/practiceFeedback';
-import PracticeResultModal from '@/components/PracticeResultModal';
+import PracticeResultModal from '../../components/PracticeResultModal';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
@@ -73,7 +73,7 @@ export default function TrainingPage() {
     setTimeout(() => setNotification(null), 3500);
   }, []);
 
-  // REVEALING: stagger tiles
+  console.log('BUILD-CHECK-2', typeof PracticeResultModal);
   useEffect(() => {
     if (phase !== 'REVEALING') return;
     if (revealedCount >= tiles.length) {
