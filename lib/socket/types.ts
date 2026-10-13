@@ -97,6 +97,14 @@ export interface PlayerRoundResult {
   outcome: 'win' | 'loss' | 'draw';
 }
 
+/** Best (fewest-step, closest) solution for a round. Sent only after the round ends. */
+export interface BestSolutionPayload {
+  steps: { a: number; op: string; b: number; result: number }[];
+  expression: string;
+  finalValue: number;
+  diff: number;
+}
+
 // ---------------------------------------------------------------------------
 // SERVER → CLIENT events
 // ---------------------------------------------------------------------------
@@ -168,6 +176,7 @@ export interface ServerToClientEvents {
     roundNumber: number;
     /** Whether the puzzle had an exact solution. Safe to show after the round. */
     solvable: boolean;
+    bestSolution?: BestSolutionPayload;
     player1: PlayerRoundResult;
     player2: PlayerRoundResult;
     /** Cumulative raw score for player1 across all rounds so far. */

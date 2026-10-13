@@ -46,6 +46,7 @@ import type {
   Step,
   PlayerSlot,
   ServerErrorCode,
+  BestSolutionPayload,
 } from '@/lib/socket/types';
 import type { RoundHistoryItem, MMRStats } from '@/components/GameOverModal';
 
@@ -79,6 +80,7 @@ interface HistorySnapshot {
 interface RoundResultPayload {
   roundNumber: number;
   solvable: boolean;
+  bestSolution?: BestSolutionPayload;
   player1: {
     points: number;
     pointsRaw: number;
@@ -1047,7 +1049,17 @@ function MatchBoard({ matchId }: { matchId: string }) {
             totalPoints: oppFinalScore,
             scoreBreakdown: oppRoundResult?.reason,
           }}
-          solvability={{ solvable: lastRoundResult.solvable }}
+          solvability={{
+            solvable: lastRoundResult.solvable,
+            bestExpression: lastRoundResult.bestSolution
+              ? lastRoundResult.bestSolution.steps.length > 0
+                ? `${lastRoundResult.bestSolution.expression} = ${lastRoundResult.bestSolution.finalValue}`
+                : String(lastRoundResult.bestSolution.finalValue)
+              : undefined,
+            bestSteps: lastRoundResult.bestSolution?.steps.map(
+              (s) => `${s.a} ${s.op} ${s.b} = ${s.result}`
+            ),
+          }}
           countdownSeconds={MODAL_DISPLAY_MS / 1000}
           // onNextRound is intentionally a no-op — the page's modalTimerRef drives the transition
           onNextRound={() => { }}
