@@ -1,9 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Navbar from '@/components/Navbar';
-import { generateTilePool, generateTarget, applyOp, closestValue, Tile, Step } from '@/lib/gameEngine';
+import { generateTilePool, generateTarget, applyOp, findBestSolution, Tile, Step } from '@/lib/gameEngine';
+import type { BestSolution } from '@/lib/gameEngine';
+import { evaluatePractice } from '@/lib/practiceFeedback';
+import type { PracticeFeedback } from '@/lib/practiceFeedback';
+import PracticeResultModal from '../../components/PracticeResultModal';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
@@ -16,6 +20,13 @@ interface HistorySnapshot {
   workingHistory: Step[];
   activeOperator: '+' | '−' | '×' | '÷' | null;
   activeTile: Tile | null;
+}
+
+interface PracticeResult {
+  feedback: PracticeFeedback;
+  result: number | null;
+  stepsUsed: number;
+  timedOut: boolean;
 }
 
 const PREP_SECONDS = 5;
@@ -53,13 +64,16 @@ export default function TrainingPage() {
   const [stopwatchTime, setStopwatchTime] = useState(0);
   const [notification, setNotification] = useState<{ msg: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [hintText, setHintText] = useState<string | null>(null);
-
+  const [practiceResult, setPracticeResult] = useState<PracticeResult | null>(null);
+  const [bestSolution, setBestSolution] = useState<BestSolution | null>(null);
+  /** Bumped whenever a puzzle ends or resets, so a late solver result for an old puzzle is ignored. */
+  const solveToken = useRef(0);
   const showNote = useCallback((msg: string, type: 'success' | 'error' | 'info') => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3500);
   }, []);
 
-  // REVEALING: stagger tiles
+  console.log('BUILD-CHECK-2', typeof PracticeResultModal);
   useEffect(() => {
     if (phase !== 'REVEALING') return;
     if (revealedCount >= tiles.length) {
@@ -92,12 +106,14 @@ export default function TrainingPage() {
     return () => clearTimeout(t);
   }, [phase, prepCountdown, timerMode, tiles]);
 
+  // Always points at the latest finishRound so the timer effect never uses stale state
+  const finishRoundRef = useRef(finishRound);
+  finishRoundRef.current = finishRound;
   // PLAYING: clocks
   useEffect(() => {
     if (phase !== 'PLAYING') return;
     if (timerMode === '30s' || timerMode === '60s') {
-      if (gameTime <= 0) { showNote("Time's up!", 'error'); setPhase('DONE'); return; }
-      const t = setTimeout(() => setGameTime(c => c - 1), 1000);
+      if (gameTime <= 0) { finishRoundRef.current(true); return; } const t = setTimeout(() => setGameTime(c => c - 1), 1000);
       return () => clearTimeout(t);
     }
     if (timerMode === 'stopwatch') {
@@ -143,7 +159,15 @@ export default function TrainingPage() {
    * @returns void
    * @description Resets game states, generates target and tiles, and transitions to the REVEALING phase.
    */
+
+  function clearPracticeResult() {
+    solveToken.current += 1;
+    setPracticeResult(null);
+    setBestSolution(null);
+  }
+
   function startWithLarge(count: number | 'random') {
+    clearPracticeResult();
     const newTiles = generateTilePool(count);
     const newTarget = generateTarget();
     setTiles(newTiles); setTarget(newTarget);
@@ -168,6 +192,7 @@ export default function TrainingPage() {
    * @description Clears all states, target, and calculation history, transitioning the game flow back to the start.
    */
   function handleReset() {
+    clearPracticeResult();
     const newTiles = generateTilePool(2);
     setTiles(newTiles); setPoolTiles([]); setSelectedTile(null);
     setSelectedOp(null); setSteps([]); setHintText(null);
@@ -332,11 +357,59 @@ export default function TrainingPage() {
    * @returns void
    * @description Finds the closest value to the target in the remaining tiles and transitions phase to DONE.
    */
-  function handleSubmit() {
-    const all = [...tiles, ...poolTiles];
-    const { value, diff } = closestValue(all, target);
-    showNote(diff === 0 ? '🏆 Solved! Perfect!' : `Closest: ${value} (off by ${diff})`, diff === 0 ? 'success' : 'error');
+  /**
+  * Ends the round (Submit click or timer expiry): works out the player's best
+  * value, picks the feedback message, stops the clocks (phase → DONE) and
+  * kicks off the best-solution search. The board is left untouched so the
+  * overlay can sit on top of it.
+  */
+  function finishRound(timedOut = false) {
+    if (phase !== 'PLAYING') return;
+
+    // 1. Final result: closest value among every step result and every unused tile.
+    //    With no steps, only a starting tile that already equals the target counts.
+    const unusedValues = [...tiles, ...poolTiles].filter(t => !t.used).map(t => t.value);
+    let result: number | null = null;
+    if (steps.length === 0) {
+      result = unusedValues.includes(target) ? target : null;
+    } else {
+      const reached = [...steps.map(s => s.result), ...unusedValues];
+      result = reached.reduce((best, v) =>
+        Math.abs(v - target) < Math.abs(best - target) ? v : best
+      );
+    }
+
+    // 2. Feedback + show overlay
+    const token = ++solveToken.current;
+    setPracticeResult({
+      feedback: evaluatePractice(target, result),
+      result,
+      stepsUsed: steps.length,
+      timedOut,
+    });
+    setBestSolution(null);
     setPhase('DONE');
+
+    // 3. Solve once, after the overlay has had a chance to paint.
+    //    `tiles` always holds the original six values, so Undo/Clear can't affect this.
+    const values = tiles.map(t => t.value);
+    const puzzleTarget = target;
+    setTimeout(() => {
+      const solution = findBestSolution(values, puzzleTarget);
+      if (solveToken.current === token) setBestSolution(solution);
+    }, 50);
+  }
+
+  function handleSubmit() {
+    finishRound(false);
+  }
+
+  function handleTryAgain() {
+    setPhase('SELECTING'); // reuse the existing "How many large numbers?" modal
+  }
+
+  function handleTryRealMatch() {
+    router.push('/lobby');
   }
 
   const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
@@ -353,8 +426,8 @@ export default function TrainingPage() {
         {notification && (
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             className={`fixed top-20 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-lg font-bold text-sm tracking-wider shadow-lg ${notification.type === 'success' ? 'bg-primary-container text-on-primary-container border border-primary-fixed-dim shadow-[0_0_15px_rgba(0,240,255,0.4)]'
-                : notification.type === 'info' ? 'bg-surface-container-high text-on-surface border border-outline-variant'
-                  : 'bg-error-container text-on-error-container border border-error'
+              : notification.type === 'info' ? 'bg-surface-container-high text-on-surface border border-outline-variant'
+                : 'bg-error-container text-on-error-container border border-error'
               }`}>{notification.msg}</motion.div>
         )}
       </AnimatePresence>
@@ -372,8 +445,8 @@ export default function TrainingPage() {
                 {([0, 1, 2, 3, 4, 'random'] as (number | 'random')[]).map((v) => (
                   <button key={String(v)} onClick={() => startWithLarge(v)}
                     className={`py-4 rounded-xl font-bold text-lg border transition-all hover:scale-105 active:scale-95 ${v === 'random'
-                        ? 'col-span-3 bg-primary-container text-on-primary-container border-primary-fixed-dim shadow-[0_0_12px_rgba(0,240,255,0.3)] neon-glow'
-                        : 'bg-surface-container-high border-outline-variant/50 text-on-surface hover:border-primary hover:shadow-[0_0_10px_rgba(0,240,255,0.3)]'
+                      ? 'col-span-3 bg-primary-container text-on-primary-container border-primary-fixed-dim shadow-[0_0_12px_rgba(0,240,255,0.3)] neon-glow'
+                      : 'bg-surface-container-high border-outline-variant/50 text-on-surface hover:border-primary hover:shadow-[0_0_10px_rgba(0,240,255,0.3)]'
                       }`}>
                     {v === 'random' ? '🎲 Random' : `${v} Large`}
                   </button>
@@ -434,7 +507,7 @@ export default function TrainingPage() {
               <button key={mode} onClick={() => { setTimerMode(mode); }}
                 disabled={phase === 'PLAYING' || phase === 'PREPARING' || phase === 'REVEALING'}
                 className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all disabled:opacity-50 ${timerMode === mode ? 'bg-primary-container text-on-primary-container shadow-[0_0_10px_rgba(0,240,255,0.4)]'
-                    : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/40'
+                  : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/40'
                   }`}>
                 {mode === 'stopwatch' ? 'Stopwatch' : mode === 'untimed' ? 'Untimed' : mode}
               </button>
@@ -506,8 +579,8 @@ export default function TrainingPage() {
             {(['+', '−', '×', '÷'] as const).map(op => (
               <button key={op} onClick={() => handleOp(op)} disabled={phase !== 'PLAYING' || !selectedTile}
                 className={`w-14 h-14 rounded-xl border font-bold text-xl transition-all disabled:opacity-30 disabled:pointer-events-none ${selectedOp === op
-                    ? 'bg-primary-container border-primary-fixed-dim text-on-primary-container shadow-[0_0_14px_rgba(0,240,255,0.5)]'
-                    : 'bg-surface-variant/30 border-outline-variant hover:border-primary-fixed-dim hover:text-primary-fixed-dim'
+                  ? 'bg-primary-container border-primary-fixed-dim text-on-primary-container shadow-[0_0_14px_rgba(0,240,255,0.5)]'
+                  : 'bg-surface-variant/30 border-outline-variant hover:border-primary-fixed-dim hover:text-primary-fixed-dim'
                   }`}>{op}</button>
             ))}
           </div>
@@ -525,8 +598,8 @@ export default function TrainingPage() {
                   <motion.button key={tile.id} custom={i} variants={tileVariants} initial="hidden" animate={visible ? 'visible' : 'hidden'}
                     onClick={() => handleTileClick(tile)} disabled={phase !== 'PLAYING' || tile.used}
                     className={`aspect-square rounded-xl border font-bold text-lg flex items-center justify-center transition-all ${tile.used ? 'opacity-25 cursor-not-allowed bg-surface-container-lowest border-outline-variant/10'
-                        : isSel ? 'border-primary bg-surface-container-highest shadow-[0_0_14px_rgba(0,240,255,0.6)] text-primary scale-105'
-                          : 'bg-surface-container-high border-outline-variant/50 hover:border-primary hover:shadow-[0_0_8px_rgba(0,240,255,0.3)] hover:scale-105'
+                      : isSel ? 'border-primary bg-surface-container-highest shadow-[0_0_14px_rgba(0,240,255,0.6)] text-primary scale-105'
+                        : 'bg-surface-container-high border-outline-variant/50 hover:border-primary hover:shadow-[0_0_8px_rgba(0,240,255,0.3)] hover:scale-105'
                       }`}>{tile.value}</motion.button>
                 );
               })}
@@ -542,7 +615,7 @@ export default function TrainingPage() {
                   <motion.button key={tile.id} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                     onClick={() => handleTileClick(tile)} disabled={phase !== 'PLAYING'}
                     className={`px-5 py-2 rounded-xl border font-bold transition-all ${isSel ? 'border-primary bg-secondary-container/40 text-primary shadow-[0_0_14px_rgba(0,240,255,0.6)] scale-105'
-                        : 'border-secondary/40 bg-secondary-container/20 text-secondary hover:bg-secondary-container/40 hover:scale-105'
+                      : 'border-secondary/40 bg-secondary-container/20 text-secondary hover:bg-secondary-container/40 hover:scale-105'
                       }`}>{tile.value}</motion.button>
                 );
               })}
@@ -566,6 +639,21 @@ export default function TrainingPage() {
           </div>
         </div>
       </main>
+
+      {/* Practice result overlay */}
+      {practiceResult && (
+        <PracticeResultModal
+          isOpen={phase === 'DONE'}
+          feedback={practiceResult.feedback}
+          target={target}
+          result={practiceResult.result}
+          stepsUsed={practiceResult.stepsUsed}
+          timedOut={practiceResult.timedOut}
+          bestSolution={bestSolution}
+          onTryRealMatch={handleTryRealMatch}
+          onTryAgain={handleTryAgain}
+        />
+      )}
     </div>
   );
 }
