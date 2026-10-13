@@ -12,7 +12,7 @@
  */
 
 import type { Tile } from '../types/events';
-
+import type { BestSolution } from '../game/gameEngine';
 
 //records the step that the players have
 export interface SubmissionStep {
@@ -47,6 +47,7 @@ export interface RoomState {
   currentTiles: Tile[];
   currentTarget: number;
   currentSolvable: boolean;
+  currentBestSolution: BestSolution | null;
   startTimestamp: number | null;
 
   roundTimer: NodeJS.Timeout | null;
@@ -82,6 +83,7 @@ export class RoomManager {
       currentTiles: [],
       currentTarget: 0,
       currentSolvable: false,
+      currentBestSolution: null,
       startTimestamp: null,
       roundTimer: null,
       disconnectTimers: {},
@@ -177,7 +179,8 @@ export class RoomManager {
     tiles: Tile[],
     target: number,
     solvable: boolean,
-    startTimestamp: number
+    startTimestamp: number,
+    bestSolution: BestSolution | null = null
   ): void {
     const room = this.rooms.get(matchId);
     if (!room) return;
@@ -186,6 +189,7 @@ export class RoomManager {
     room.currentTiles = tiles;
     room.currentTarget = target;
     room.currentSolvable = solvable;
+    room.currentBestSolution = bestSolution;
     room.startTimestamp = startTimestamp;
     room.submissions = {};
 

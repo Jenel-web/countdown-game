@@ -25,7 +25,7 @@ import { adminClient } from '../../supabase/adminClient';
 import {
   generateTilePool,
   generateTarget,
-  checkSolvability,
+  findBestSolution,
   validateSubmission,
   scoreRound,
   checkMatchOver,
@@ -75,17 +75,15 @@ export function startNextRound(io: AppServer, roomManager: RoomManager, matchId:
 
   const tiles = generateTilePool('random');
   const target = generateTarget();
-  const solveResult = checkSolvability(
+  const bestSolution = findBestSolution(
     tiles.map((t) => t.value),
     target
   );
-
+  const solvable = bestSolution.diff === 0;
   // The 30-second gameplay starts exactly 5 seconds from now (after the 5s prep countdown).
   const now = Date.now();
   const gameplayStartTimestamp = now + ROUND_PREP_MS;
-  roomManager.resetRound(matchId, tiles, target, solveResult.solvable, gameplayStartTimestamp);
-
-  io.to(matchId).emit('round_start', {
+  roomManager.resetRound(matchId, tiles, target, solvable, gameplayStartTimestamp, bestSolution); io.to(matchId).emit('round_start', {
     roundNumber: room.currentRound,
     tiles,
     target,
@@ -157,6 +155,7 @@ export async function evaluateRound(
   io.to(matchId).emit('round_result', {
     roundNumber: updatedRoom.currentRound,
     solvable: scoreResult.solvable,
+    bestSolution: updatedRoom.currentBestSolution ?? undefined,
     player1: {
       ...scoreResult.player1,
       result: p1sub.result,

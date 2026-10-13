@@ -87,6 +87,13 @@ export interface PlayerRoundResult {
   steps?: { a: number; op: string; b: number; result: number }[];
 }
 
+/** Best (fewest-step, closest) solution for a round. Sent only after the round ends. */
+export interface BestSolutionPayload {
+  steps: { a: number; op: string; b: number; result: number }[];
+  expression: string;
+  finalValue: number;
+  diff: number;
+}
 // ---------------------------------------------------------------------------
 // SERVER -> CLIENT events
 // ---------------------------------------------------------------------------
@@ -139,6 +146,7 @@ export interface ServerToClientEvents {
      */
     roundNumber: number;
     solvable: boolean;
+    bestSolution?: BestSolutionPayload;
     player1: PlayerRoundResult;
     player2: PlayerRoundResult;
     player1TotalRaw: number;

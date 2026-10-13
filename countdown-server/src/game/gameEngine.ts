@@ -189,6 +189,90 @@ export function checkSolvability(values: number[], target: number): SolveResult 
     return { solvable: bestDiff === 0, bestDiff, bestExpression };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Best-Solution Finder (fewest steps, closest value)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface BestSolution {
+    /** Ordered steps from the original tiles to the best reachable value. Empty if a raw tile is already the best. */
+    steps: { a: number; op: string; b: number; result: number }[];
+    /** Nested expression, e.g. "(25+50)×3" */
+    expression: string;
+    /** The value the steps end on. */
+    finalValue: number;
+    /** |finalValue - target|. 0 means the exact target was reached. */
+    diff: number;
+}
+
+const SOLVER_OPS = ['+', '\u2212', '\u00D7', '\u00F7'] as const;
+
+/**
+ * Finds the reachable value closest to the target using the FEWEST steps.
+ * Uses iterative deepening: tries 1 step, then 2, and so on. A later depth
+ * only replaces the answer if it is strictly closer, so ties always keep
+ * the shorter solution. Legality comes from applyOp(), so the rules are
+ * identical to gameplay.
+ */
+export function findBestSolution(values: number[], target: number): BestSolution {
+    type Cand = { value: number; expr: string };
+
+    let bestDiff = Infinity;
+    let bestValue = 0;
+    let bestExpr = '';
+    let bestSteps: BestSolution['steps'] = [];
+    const path: BestSolution['steps'] = [];
+
+    function record(c: Cand) {
+        const diff = Math.abs(c.value - target);
+        if (diff < bestDiff) {
+            bestDiff = diff;
+            bestValue = c.value;
+            bestExpr = c.expr;
+            bestSteps = path.slice();
+        }
+    }
+
+    function dfs(nums: Cand[], remaining: number) {
+        if (remaining === 0 || nums.length < 2) return;
+
+        for (let i = 0; i < nums.length - 1; i++) {
+            for (let j = i + 1; j < nums.length; j++) {
+                const hi = nums[i].value >= nums[j].value ? nums[i] : nums[j];
+                const lo = hi === nums[i] ? nums[j] : nums[i];
+                const rest = nums.filter((_, idx) => idx !== i && idx !== j);
+
+                for (const op of SOLVER_OPS) {
+                    // ×1 and ÷1 never help — they just burn a step.
+                    if ((op === '\u00D7' || op === '\u00F7') && lo.value === 1) continue;
+
+                    const result = applyOp(hi.value, op, lo.value);
+                    if (result === null) continue;
+
+                    const cand: Cand = { value: result, expr: `(${hi.expr}${op}${lo.expr})` };
+                    path.push({ a: hi.value, op, b: lo.value, result });
+                    record(cand);
+                    if (bestDiff !== 0) dfs([...rest, cand], remaining - 1);
+                    path.pop();
+
+                    if (bestDiff === 0) return;
+                }
+            }
+        }
+    }
+
+    const initial: Cand[] = values.map((v) => ({ value: v, expr: String(v) }));
+    for (const c of initial) record(c); // zero-step answer: a raw tile
+
+    for (let limit = 1; limit <= values.length - 1 && bestDiff !== 0; limit++) {
+        dfs(initial, limit);
+    }
+
+    const expression =
+        bestExpr.startsWith('(') && bestExpr.endsWith(')') ? bestExpr.slice(1, -1) : bestExpr;
+
+    return { steps: bestSteps, expression, finalValue: bestValue, diff: bestDiff };
+}
+
 
 console.log('TEST checkSolvability:', checkSolvability([25, 50, 75, 100, 3, 6], 952));
 
