@@ -22,7 +22,6 @@
 import type { Server, Socket } from 'socket.io';
 import { RoomManager } from '../../rooms/RoomManager';
 import { adminClient } from '../../supabase/adminClient';
-import { markMatchEnded } from '../../supabase/matchEnd';
 import {
   generateTilePool,
   generateTarget,
@@ -198,8 +197,10 @@ export async function evaluateRound(
     roomManager.removeRoom(matchId);
 
     // Calls the 5-argument finish_match() Postgres function (SECURITY
-    // DEFINER, idempotent) that atomically completes the match row and
-    // updates both players' profile stats.
+    // DEFINER, idempotent). In ONE transaction it completes the match row
+    // (status, winner, scores, ended_at) and updates both players' wins,
+    // losses, matches_played and MMR (+25 winner, -15 loser, floor 0).
+    // Nothing else may write those columns.
     const { error: finishError } = await adminClient.rpc('finish_match', {
       p_match_id: matchId,
       p_winner_id: winnerId,
@@ -210,31 +211,6 @@ export async function evaluateRound(
 
     if (finishError) {
       console.error(`[match ${matchId}] finish_match RPC failed:`, finishError);
-    } else {
-      await markMatchEnded(matchId);
-    }
-
-    // Update MMR ratings AND win/loss records.
-    // Winner: mmr +25, wins +1. Loser: mmr -15 (floor 0), losses +1.
-    try {
-      const { data: profiles } = await adminClient
-        .from('profiles')
-        .select('id, mmr, wins, losses')
-        .in('id', [winnerId, loserId]);
-
-      if (profiles) {
-        const winnerProf = profiles.find((p) => p.id === winnerId);
-        const loserProf = profiles.find((p) => p.id === loserId);
-        const winnerNewMmr = (winnerProf?.mmr ?? 1000) + 25;
-        const loserNewMmr = Math.max(0, (loserProf?.mmr ?? 1000) - 15);
-
-        await Promise.all([
-          adminClient.from('profiles').update({ mmr: winnerNewMmr }).eq('id', winnerId),
-          adminClient.from('profiles').update({ mmr: loserNewMmr }).eq('id', loserId),
-        ]);
-      }
-    } catch (mmrErr) {
-      console.error(`[match ${matchId}] failed to update match MMR/win-loss:`, mmrErr);
     }
 
     io.to(matchId).emit('match_over', { winnerId, ...finalTotals });

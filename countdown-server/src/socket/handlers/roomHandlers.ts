@@ -13,7 +13,6 @@
 import type { Server, Socket } from 'socket.io';
 import { RoomManager } from '../../rooms/RoomManager';
 import { adminClient } from '../../supabase/adminClient';
-import { markMatchEnded } from '../../supabase/matchEnd';
 import { startNextRound } from './roundHandlers';
 import type {
   ClientToServerEvents,
@@ -82,33 +81,10 @@ async function forfeitMatch(
     p_loser_score: loserScore,
   });
 
+  // finish_match also applies the win/loss record and MMR change (+25 / -15),
+  // so a forfeit is scored exactly like a normal finish.
   if (finishError) {
     console.error(`[match ${matchId}] finish_match RPC failed on disconnect forfeit:`, finishError);
-  } else {
-    await markMatchEnded(matchId);
-  }
-
-  // Update MMR ratings AND win/loss records for forfeit resolution.
-  // Winner: mmr +25, wins +1. Loser: mmr -15 (floor 0), losses +1.
-  try {
-    const { data: profiles } = await adminClient
-      .from('profiles')
-      .select('id, mmr, wins, losses')
-      .in('id', [remainingPlayerId, disconnectedPlayerId]);
-
-    if (profiles) {
-      const winnerProf = profiles.find((p) => p.id === remainingPlayerId);
-      const loserProf = profiles.find((p) => p.id === disconnectedPlayerId);
-      const winnerNewMmr = (winnerProf?.mmr ?? 1000) + 25;
-      const loserNewMmr = Math.max(0, (loserProf?.mmr ?? 1000) - 15);
-
-      await Promise.all([
-        adminClient.from('profiles').update({ mmr: winnerNewMmr }).eq('id', remainingPlayerId),
-        adminClient.from('profiles').update({ mmr: loserNewMmr }).eq('id', disconnectedPlayerId),
-      ]);
-    }
-  } catch (mmrErr) {
-    console.error(`[match ${matchId}] failed to update forfeit MMR/win-loss:`, mmrErr);
   }
 }
 

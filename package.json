@@ -11,7 +11,7 @@
     "test:watch": "vitest",
     "test:unit": "vitest run lib/gameEngine.test.ts",
     "test:integration": "vitest run countdown-server/test/integration",
-    "test:db": "vitest run countdown-server/test/db"
+    "test:db": "npm --prefix countdown-server run test:db"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.6",
