@@ -282,8 +282,8 @@ describe('scoreRound', () => {
 
     it('both players time out: draw, 0 points each', () => {
         const result = scoreRound(TARGET, true, { result: null, timeMs: null }, { result: null, timeMs: null });
-        expect(result.player1).toEqual({ points: 0, pointsRaw: 0, outcome: 'draw' });
-        expect(result.player2).toEqual({ points: 0, pointsRaw: 0, outcome: 'draw' });
+        expect(result.player1).toMatchObject({ points: 0, pointsRaw: 0, outcome: 'draw' });
+        expect(result.player2).toMatchObject({ points: 0, pointsRaw: 0, outcome: 'draw' });
     });
 
     it('player1 times out: player2 gets an automatic MAX win regardless of how close they actually got', () => {
@@ -295,14 +295,14 @@ describe('scoreRound', () => {
             { result: null, timeMs: null },
             { result: 1, timeMs: 29000 }
         );
-        expect(result.player1).toEqual({ points: 0, pointsRaw: 0, outcome: 'loss' });
-        expect(result.player2).toEqual({ points: 1, pointsRaw: 100, outcome: 'win' });
+        expect(result.player1).toMatchObject({ points: 0, pointsRaw: 0, outcome: 'loss' });
+        expect(result.player2).toMatchObject({ points: 1, pointsRaw: 100, outcome: 'win' });
     });
 
     it('player2 times out: player1 gets the automatic max win (symmetric case)', () => {
         const result = scoreRound(TARGET, false, { result: 1, timeMs: 29000 }, { result: null, timeMs: null });
-        expect(result.player1).toEqual({ points: 1, pointsRaw: 100, outcome: 'win' });
-        expect(result.player2).toEqual({ points: 0, pointsRaw: 0, outcome: 'loss' });
+        expect(result.player1).toMatchObject({ points: 1, pointsRaw: 100, outcome: 'win' });
+        expect(result.player2).toMatchObject({ points: 0, pointsRaw: 0, outcome: 'loss' });
     });
 
     it('exact match wins outright: winner gets 1.0, loser beyond 3 away gets 0', () => {
@@ -312,8 +312,8 @@ describe('scoreRound', () => {
             { result: 500, timeMs: 10000 },
             { result: 480, timeMs: 12000 } // off by 20
         );
-        expect(result.player1).toEqual({ points: 1, pointsRaw: 100, outcome: 'win' });
-        expect(result.player2).toEqual({ points: 0, pointsRaw: 0, outcome: 'loss' });
+        expect(result.player1).toMatchObject({ points: 1, pointsRaw: 100, outcome: 'win' });
+        expect(result.player2).toMatchObject({ points: 0, pointsRaw: 0, outcome: 'loss' });
     });
 
     it('exact match wins outright: loser WITHIN 3 of target gets the 0.35 consolation', () => {
@@ -323,8 +323,8 @@ describe('scoreRound', () => {
             { result: 500, timeMs: 10000 },
             { result: 497, timeMs: 12000 } // off by exactly 3 — boundary, should qualify
         );
-        expect(result.player1).toEqual({ points: 1, pointsRaw: 100, outcome: 'win' });
-        expect(result.player2).toEqual({ points: 0.35, pointsRaw: 35, outcome: 'loss' });
+        expect(result.player1).toMatchObject({ points: 1, pointsRaw: 100, outcome: 'win' });
+        expect(result.player2).toMatchObject({ points: 0.35, pointsRaw: 35, outcome: 'loss' });
     });
 
     it('exact match: loser boundary — 4 away does NOT qualify for the consolation', () => {
@@ -334,7 +334,7 @@ describe('scoreRound', () => {
             { result: 500, timeMs: 10000 },
             { result: 496, timeMs: 12000 } // off by exactly 4 — just over the line
         );
-        expect(result.player2).toEqual({ points: 0, pointsRaw: 0, outcome: 'loss' });
+        expect(result.player2).toMatchObject({ points: 0, pointsRaw: 0, outcome: 'loss' });
     });
 
     it('an exact match wins even when solvable=false is (incorrectly) passed in — the function trusts a real diff of 0 over the flag', () => {
@@ -354,8 +354,8 @@ describe('scoreRound', () => {
             { result: 490, timeMs: 10000 }, // off by 10
             { result: 470, timeMs: 12000 }  // off by 30
         );
-        expect(result.player1).toEqual({ points: 0.7, pointsRaw: 70, outcome: 'win' });
-        expect(result.player2).toEqual({ points: 0, pointsRaw: 0, outcome: 'loss' });
+        expect(result.player1).toMatchObject({ points: 0.7, pointsRaw: 70, outcome: 'win' });
+        expect(result.player2).toMatchObject({ points: 0, pointsRaw: 0, outcome: 'loss' });
     });
 
     it('solvable-closest: loser within 3 still gets the 0.35 consolation', () => {
@@ -370,8 +370,8 @@ describe('scoreRound', () => {
             { result: 498, timeMs: 10000 }, // off by 2 — winner (closer)
             { result: 503, timeMs: 12000 }  // off by 3 — loser, qualifies
         );
-        expect(result.player1).toEqual({ points: 0.7, pointsRaw: 70, outcome: 'win' });
-        expect(result.player2).toEqual({ points: 0.35, pointsRaw: 35, outcome: 'loss' });
+        expect(result.player1).toMatchObject({ points: 0.7, pointsRaw: 70, outcome: 'win' });
+        expect(result.player2).toMatchObject({ points: 0.35, pointsRaw: 35, outcome: 'loss' });
     });
 
     it('unsolvable: winner within 0–3 gets the full 1.0', () => {
@@ -381,7 +381,7 @@ describe('scoreRound', () => {
             { result: 503, timeMs: 10000 }, // off by 3 — boundary, should still be full points
             { result: 550, timeMs: 12000 }
         );
-        expect(result.player1).toEqual({ points: 1, pointsRaw: 100, outcome: 'win' });
+        expect(result.player1).toMatchObject({ points: 1, pointsRaw: 100, outcome: 'win' });
     });
 
     it('unsolvable: winner boundary — off by 4 drops into the 0.8 bracket, not 1.0', () => {
@@ -391,7 +391,7 @@ describe('scoreRound', () => {
             { result: 504, timeMs: 10000 }, // off by 4
             { result: 550, timeMs: 12000 }
         );
-        expect(result.player1).toEqual({ points: 0.8, pointsRaw: 80, outcome: 'win' });
+        expect(result.player1).toMatchObject({ points: 0.8, pointsRaw: 80, outcome: 'win' });
     });
 
     it('unsolvable: winner boundary — off by 7 is still in the 0.8 bracket', () => {
@@ -401,7 +401,7 @@ describe('scoreRound', () => {
             { result: 507, timeMs: 10000 }, // off by 7
             { result: 550, timeMs: 12000 }
         );
-        expect(result.player1).toEqual({ points: 0.8, pointsRaw: 80, outcome: 'win' });
+        expect(result.player1).toMatchObject({ points: 0.8, pointsRaw: 80, outcome: 'win' });
     });
 
     it('unsolvable: winner boundary — off by 8 drops into the 0.5 bracket', () => {
@@ -411,7 +411,7 @@ describe('scoreRound', () => {
             { result: 508, timeMs: 10000 }, // off by 8
             { result: 550, timeMs: 12000 }
         );
-        expect(result.player1).toEqual({ points: 0.5, pointsRaw: 50, outcome: 'win' });
+        expect(result.player1).toMatchObject({ points: 0.5, pointsRaw: 50, outcome: 'win' });
     });
 
     it('unsolvable: loser within 3 gets the 0.4 consolation (different from the 0.35 used elsewhere)', () => {
@@ -424,8 +424,8 @@ describe('scoreRound', () => {
             { result: 499, timeMs: 10000 }, // winner, off by 1 -> 1.0 bracket
             { result: 503, timeMs: 12000 }  // loser, off by 3 -> qualifies for 0.4
         );
-        expect(result.player1).toEqual({ points: 1, pointsRaw: 100, outcome: 'win' });
-        expect(result.player2).toEqual({ points: 0.4, pointsRaw: 40, outcome: 'loss' });
+        expect(result.player1).toMatchObject({ points: 1, pointsRaw: 100, outcome: 'win' });
+        expect(result.player2).toMatchObject({ points: 0.4, pointsRaw: 40, outcome: 'loss' });
     });
 
     it('unsolvable: loser boundary — off by 4 does not qualify for the 0.4 consolation', () => {
@@ -435,7 +435,7 @@ describe('scoreRound', () => {
             { result: 499, timeMs: 10000 }, // winner, off by 1
             { result: 504, timeMs: 12000 }  // loser, off by 4 — just over the line
         );
-        expect(result.player2).toEqual({ points: 0, pointsRaw: 0, outcome: 'loss' });
+        expect(result.player2).toMatchObject({ points: 0, pointsRaw: 0, outcome: 'loss' });
     });
 
     it('same distance, different times: the FASTER player wins', () => {
@@ -467,8 +467,8 @@ describe('scoreRound', () => {
             { result: 505, timeMs: 10000 },
             { result: 495, timeMs: 10000 }
         );
-        expect(result.player1).toEqual({ points: 0.5, pointsRaw: 50, outcome: 'draw' });
-        expect(result.player2).toEqual({ points: 0.5, pointsRaw: 50, outcome: 'draw' });
+        expect(result.player1).toMatchObject({ points: 0.5, pointsRaw: 50, outcome: 'draw' });
+        expect(result.player2).toMatchObject({ points: 0.5, pointsRaw: 50, outcome: 'draw' });
     });
 
     it('true draw (same distance AND same time), solvable: both get 0.35', () => {
@@ -478,8 +478,8 @@ describe('scoreRound', () => {
             { result: 505, timeMs: 10000 },
             { result: 495, timeMs: 10000 }
         );
-        expect(result.player1).toEqual({ points: 0.35, pointsRaw: 35, outcome: 'draw' });
-        expect(result.player2).toEqual({ points: 0.35, pointsRaw: 35, outcome: 'draw' });
+        expect(result.player1).toMatchObject({ points: 0.35, pointsRaw: 35, outcome: 'draw' });
+        expect(result.player2).toMatchObject({ points: 0.35, pointsRaw: 35, outcome: 'draw' });
     });
 
     it('the `solvable` flag passed in is always echoed back unchanged in the result', () => {

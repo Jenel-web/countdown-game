@@ -481,17 +481,3 @@ export function validateSubmission(
     const lastStep = steps[steps.length - 1];
     return { valid: true, finalValue: lastStep.result };
 }
-
-console.log('TEST scoreRound (exact vs miss, solvable):', scoreRound(
-    500, true,
-    { result: 500, timeMs: 12000 },  // player 1: exact
-    { result: 480, timeMs: 15000 }   // player 2: off by 20
-));
-// Expect: player1 { points: 1, outcome: 'win' }, player2 { points: 0, outcome: 'loss' }
-
-console.log('TEST scoreRound (unsolvable, both timeout):', scoreRound(
-    500, false,
-    { result: null, timeMs: null },
-    { result: null, timeMs: null }
-));
-// Expect: both { points: 0, outcome: 'draw' }
