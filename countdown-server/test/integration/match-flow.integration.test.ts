@@ -217,7 +217,7 @@ describe('full match flow (real sockets, mocked Supabase)', () => {
         expect(persisted.player2_steps).toBeNull();
     });
 
-    it('driving a match to 5 points calls finish_match with the correct winner/loser and marks the row finished', async () => {
+    it('driving a match to 5 points calls finish_match with the correct winner/loser and marks the row completed', async () => {
         const matchId = randomUUID();
         seedWaitingMatch(matchId, 'winner-user');
 
@@ -277,14 +277,13 @@ describe('full match flow (real sockets, mocked Supabase)', () => {
         });
 
         const row = mockAdmin.__state.matches.find((m) => m.id === matchId);
-        expect(row?.status).toBe('finished');
+        expect(row?.status).toBe('completed');
         expect(row?.winner_id).toBe('winner-user');
         expect(row?.ended_at).toEqual(expect.any(String)); // History sorts by this
 
-        const winnerUpdate = mockAdmin.__state.profileUpdates.find((u) => u.id === 'winner-user');
-        const loserUpdate = mockAdmin.__state.profileUpdates.find((u) => u.id === 'loser-user');
-        expect(winnerUpdate?.patch).toMatchObject({ mmr: 1025 });
-        expect(loserUpdate?.patch).toMatchObject({ mmr: 985 });;
+        // Wins, losses and MMR belong to finish_match alone: the server must
+        // not write to profiles directly.
+        expect(mockAdmin.__state.profileUpdates).toEqual([]);
     }, 20000);
 
     it('a mid-match disconnect awards the remaining player an immediate forfeit win', async () => {
@@ -319,14 +318,12 @@ describe('full match flow (real sockets, mocked Supabase)', () => {
         ]);
 
         const row = mockAdmin.__state.matches.find((m) => m.id === matchId);
-        expect(row?.status).toBe('finished');
+        expect(row?.status).toBe('completed');
         expect(row?.winner_id).toBe('staying-user');
         expect(row?.ended_at).toEqual(expect.any(String));
 
-        const winnerForfeitUpdate = mockAdmin.__state.profileUpdates.find((u) => u.id === 'staying-user');
-        const loserForfeitUpdate = mockAdmin.__state.profileUpdates.find((u) => u.id === 'leaving-user');
-        expect(winnerForfeitUpdate?.patch).toMatchObject({ mmr: 1025 });
-        expect(loserForfeitUpdate?.patch).toMatchObject({ mmr: 985 });
+        // A forfeit is also scored only through finish_match, never by direct profile writes.
+        expect(mockAdmin.__state.profileUpdates).toEqual([]);
     });
 
     it('BOTH players disconnecting at once discards the match without calling finish_match', async () => {

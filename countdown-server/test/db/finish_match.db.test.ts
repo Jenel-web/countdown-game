@@ -26,11 +26,16 @@
  * RUN:   npm run test:db
  * If the env vars are missing, every test here is SKIPPED (not failed).
  *
- * NOTE — NOT YET RUN: this file was written against the schema in our
- * earlier SQL (profiles.wins / losses / matches_played; matches.p1_score /
- * p2_score / status 'waiting'|'in_progress'|'completed'). If your real
- * columns differ (your profiles table now has `email`, `mmr`), adjust the
- * marked spots. Treat the first run as a shakedown.
+ * SCHEMA THESE TESTS ASSUME (matches the live project as of 2026-10-14):
+ *   profiles: id, email, wins, losses, matches_played, mmr (default 1000)
+ *   matches:  player1_total_points / player2_total_points, winner_id,
+ *             status ('active' while playing, 'completed' when done), ended_at
+ * The local database must have the current finish_match applied: the 5-argument
+ * function from docs/sql/2026-10-14-finish-match-hardening.sql (STEP 1 to 3),
+ * so MMR is applied inside the function (+25 winner, -15 loser, floor 0).
+ *
+ * NOT YET RUN: the repository has no migrations, so a local database has to be
+ * built by hand from the live schema first. Treat the first run as a shakedown.
  * =============================================================================
  */
 
@@ -62,7 +67,7 @@ describe.skipIf(!haveEnv)('finish_match + matches RLS (real local Supabase)', ()
         // ADJUST: if your handle_new_user() trigger already creates the profile row,
         // this upsert is harmless. If not, it is what creates it. Add any NOT NULL
         // columns your profiles table requires (e.g. `email`).
-        await admin.from('profiles').upsert({ id, email, wins: 0, losses: 0, matches_played: 0 });
+        await admin.from('profiles').upsert({ id, email, wins: 0, losses: 0, matches_played: 0, mmr: 1000 });
 
         const client = createClient(URL!, ANON!, { auth: { persistSession: false, autoRefreshToken: false } });
         const { error: signInError } = await client.auth.signInWithPassword({ email, password });
@@ -76,7 +81,7 @@ describe.skipIf(!haveEnv)('finish_match + matches RLS (real local Supabase)', ()
         // Setup via service role, since regular players can't insert an in-progress match.
         const { error } = await admin
             .from('matches')
-            .insert({ id, player1_id: p1, player2_id: p2, status: 'in_progress' }); // ADJUST status value if yours differs
+            .insert({ id, player1_id: p1, player2_id: p2, status: 'active' });
         if (error) throw error;
         return id;
     }
@@ -98,8 +103,8 @@ describe.skipIf(!haveEnv)('finish_match + matches RLS (real local Supabase)', ()
         const { data: match } = await admin.from('matches').select('*').eq('id', matchId).single();
         expect(match!.status).toBe('completed');
         expect(match!.winner_id).toBe(a.id);
-        expect(match!.p1_score).toBe(520); // player1 was the winner
-        expect(match!.p2_score).toBe(310);
+        expect(match!.player1_total_points).toBe(520); // player1 was the winner
+        expect(match!.player2_total_points).toBe(310);
         expect(match!.ended_at).not.toBeNull();
 
         const { data: winner } = await admin.from('profiles').select('*').eq('id', a.id).single();
@@ -108,9 +113,31 @@ describe.skipIf(!haveEnv)('finish_match + matches RLS (real local Supabase)', ()
         expect(winner!.matches_played).toBe(1);
         expect(loser!.losses).toBe(1);
         expect(loser!.matches_played).toBe(1);
+        // MMR is applied inside the same transaction: +25 winner, -15 loser.
+        expect(winner!.mmr).toBe(1025);
+        expect(loser!.mmr).toBe(985);
     });
 
-    it('is idempotent: calling finish_match twice does NOT double-count wins/losses', async () => {
+    it('MMR for the loser never drops below 0', async () => {
+        const a = await createPlayer('a');
+        const b = await createPlayer('b');
+        await admin.from('profiles').update({ mmr: 10 }).eq('id', b.id);
+        const matchId = await seedActiveMatch(a.id, b.id);
+
+        const { error } = await admin.rpc('finish_match', {
+            p_match_id: matchId,
+            p_winner_id: a.id,
+            p_loser_id: b.id,
+            p_winner_score: 500,
+            p_loser_score: 100,
+        });
+        expect(error).toBeNull();
+
+        const { data: loser } = await admin.from('profiles').select('mmr').eq('id', b.id).single();
+        expect(loser!.mmr).toBe(0);
+    });
+
+    it('is idempotent: calling finish_match twice does NOT double-count wins/losses/MMR', async () => {
         const a = await createPlayer('a');
         const b = await createPlayer('b');
         const matchId = await seedActiveMatch(a.id, b.id);
@@ -119,9 +146,13 @@ describe.skipIf(!haveEnv)('finish_match + matches RLS (real local Supabase)', ()
         await admin.rpc('finish_match', args);
         await admin.rpc('finish_match', args); // e.g. a network retry, or the disconnect race we found
 
-        const { data: winner } = await admin.from('profiles').select('wins, matches_played').eq('id', a.id).single();
+        const { data: winner } = await admin.from('profiles').select('wins, matches_played, mmr').eq('id', a.id).single();
+        const { data: loser } = await admin.from('profiles').select('losses, mmr').eq('id', b.id).single();
         expect(winner!.wins).toBe(1);
         expect(winner!.matches_played).toBe(1);
+        expect(winner!.mmr).toBe(1025);
+        expect(loser!.losses).toBe(1);
+        expect(loser!.mmr).toBe(985);
     });
 
     it('rejects winner/loser ids that are not the two players on the match', async () => {
@@ -155,8 +186,45 @@ describe.skipIf(!haveEnv)('finish_match + matches RLS (real local Supabase)', ()
         expect(error).not.toBeNull(); // EXECUTE was revoked from `authenticated`
 
         const { data: match } = await admin.from('matches').select('status, winner_id').eq('id', matchId).single();
-        expect(match!.status).toBe('in_progress');
+        expect(match!.status).toBe('active');
         expect(match!.winner_id).toBeNull();
+    });
+
+    it('a logged-out visitor (anon key only) CANNOT call finish_match', async () => {
+        const a = await createPlayer('a');
+        const b = await createPlayer('b');
+        const matchId = await seedActiveMatch(a.id, b.id);
+
+        // The anon key ships in the public website code, so this is what anyone can do.
+        const anonClient = createClient(URL!, ANON!, { auth: { persistSession: false, autoRefreshToken: false } });
+        const { error } = await anonClient.rpc('finish_match', {
+            p_match_id: matchId,
+            p_winner_id: a.id,
+            p_loser_id: b.id,
+            p_winner_score: 999,
+            p_loser_score: 0,
+        });
+        expect(error).not.toBeNull(); // EXECUTE was revoked from `anon`
+
+        const { data: match } = await admin.from('matches').select('status, winner_id').eq('id', matchId).single();
+        expect(match!.status).toBe('active');
+        expect(match!.winner_id).toBeNull();
+    });
+
+    it('the old 3-argument finish_match no longer exists', async () => {
+        const a = await createPlayer('a');
+        const b = await createPlayer('b');
+        const matchId = await seedActiveMatch(a.id, b.id);
+
+        const { error } = await admin.rpc('finish_match', {
+            p_match_id: matchId,
+            p_winner_id: a.id,
+            p_loser_id: b.id,
+        });
+        expect(error).not.toBeNull(); // dropped: it had no ownership checks and gave mmr + 10
+
+        const { data: match } = await admin.from('matches').select('status').eq('id', matchId).single();
+        expect(match!.status).toBe('active');
     });
 
     it('a player CANNOT smuggle winner_id/scores into an UPDATE (column-level GRANT)', async () => {

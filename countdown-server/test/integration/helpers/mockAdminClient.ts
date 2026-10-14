@@ -27,7 +27,7 @@ export interface FakeMatchRow {
     id: string;
     player1_id: string;
     player2_id: string | null;
-    status: 'waiting' | 'active' | 'finished';
+    status: 'waiting' | 'active' | 'completed';
     winner_id: string | null;
     ended_at?: string | null;
 }
@@ -176,7 +176,9 @@ export function createMockAdminClient() {
 
             const row = matches.find((m) => m.id === args.p_match_id);
             if (row) {
-                row.status = 'finished';
+                // Mirrors the real finish_match(): completes the row and stamps ended_at.
+                row.status = 'completed';
+                row.ended_at = new Date().toISOString();
                 row.winner_id = args.p_winner_id;
             }
             return { error: null };
