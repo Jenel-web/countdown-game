@@ -6,6 +6,7 @@ import { Swords, Dumbbell, Trophy, Clock, LogIn, UserPlus, Zap, LogOut } from 'l
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
+import { displayName } from '@/lib/auth/username';
 
 const navLinks = [
   { href: '/lobby', label: 'Arena', icon: Swords, match: ['/lobby', '/game'] },
@@ -17,11 +18,25 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const supabase = createClient();
     let isMounted = true;
+
+    const fetchUsername = async (userId: string | undefined) => {
+      if (!userId) {
+        if (isMounted) setUsername(null);
+        return;
+      }
+      const { data } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', userId)
+        .maybeSingle();
+      if (isMounted) setUsername(data?.username ?? null);
+    };
 
     const fetchUser = async () => {
       try {
@@ -30,6 +45,7 @@ export default function Navbar() {
           setUser(user);
           setLoading(false);
         }
+        await fetchUsername(user?.id);
       } catch {
         if (isMounted) setLoading(false);
       }
@@ -42,6 +58,8 @@ export default function Navbar() {
         setUser(session?.user ?? null);
         setLoading(false);
       }
+      // Deferred so we never await a Supabase call inside the auth callback.
+      setTimeout(() => fetchUsername(session?.user?.id), 0);
     });
 
     return () => {
@@ -54,6 +72,7 @@ export default function Navbar() {
     const supabase = createClient();
     await supabase.auth.signOut();
     setUser(null);
+    setUsername(null);
     router.push('/login');
     router.refresh();
   };
@@ -77,7 +96,7 @@ export default function Navbar() {
           <div className="flex items-center gap-1">
             {navLinks.map(({ href, label, icon: Icon, match }) => {
               const active = match.some(m => pathname === m || pathname.startsWith(m));
-              const isPlaceholder = href === '/rankings' || href === '/history';
+              const isPlaceholder = href === '/rankings';
               return (
                 <Link
                   key={href}
@@ -112,7 +131,7 @@ export default function Navbar() {
                 <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-surface-high/80 border border-outline-variant/20 text-xs font-mono text-on-surface">
                   <div className="w-2 h-2 rounded-full bg-primary-container shadow-[0_0_8px_rgba(0,229,255,0.8)] animate-pulse"></div>
                   <span className="max-w-[140px] truncate text-primary-container font-medium">
-                    {user.email?.split('@')[0] || 'Operative'}
+                    {displayName({ username, email: user.email })}
                   </span>
                 </div>
                 <button

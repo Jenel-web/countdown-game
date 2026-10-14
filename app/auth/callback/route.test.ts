@@ -13,6 +13,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 // ---------------------------------------------------------------------------
 const mockExchangeCodeForSession = vi.fn();
 const mockUpsert = vi.fn();
+const mockMaybeSingle = vi.fn();
 
 vi.mock('@/lib/supabase/server', () => ({
   createClient: () => ({
@@ -21,6 +22,7 @@ vi.mock('@/lib/supabase/server', () => ({
     },
     from: () => ({
       upsert: mockUpsert,
+      select: () => ({ eq: () => ({ maybeSingle: mockMaybeSingle }) }),
     }),
   }),
 }));
@@ -85,6 +87,7 @@ describe('/auth/callback GET handler', () => {
       error: null,
     });
     mockUpsert.mockResolvedValueOnce({ error: null });
+    mockMaybeSingle.mockResolvedValueOnce({ data: { username: 'Player1' } });
 
     const req = makeRequest({ code: 'valid-code' });
     const res = await GET(req as any);
@@ -108,6 +111,7 @@ describe('/auth/callback GET handler', () => {
     });
     // Simulate a profile upsert failure
     mockUpsert.mockResolvedValueOnce({ error: { message: 'some db error' } });
+    mockMaybeSingle.mockResolvedValueOnce({ data: { username: 'Other' } });
 
     const req = makeRequest({ code: 'valid-code' });
     const res = await GET(req as any);
@@ -115,5 +119,19 @@ describe('/auth/callback GET handler', () => {
     // Sign-in still succeeds — profile sync failure is logged but not fatal
     expect(res.status).toBe(307);
     expect(res.headers.get('location')).toMatch(/\/lobby$/);
+  });
+
+  it('redirects to /choose-username when the profile has no username yet', async () => {
+    mockExchangeCodeForSession.mockResolvedValueOnce({
+      data: { user: { id: 'user-789', email: 'new@gmail.com' }, session: {} },
+      error: null,
+    });
+    mockUpsert.mockResolvedValueOnce({ error: null });
+    mockMaybeSingle.mockResolvedValueOnce({ data: { username: null } });
+
+    const res = await GET(makeRequest({ code: 'valid-code' }) as any);
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toMatch(/\/choose-username$/);
   });
 });

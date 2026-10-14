@@ -29,6 +29,7 @@ export interface FakeMatchRow {
     player2_id: string | null;
     status: 'waiting' | 'active' | 'finished';
     winner_id: string | null;
+    ended_at?: string | null;
 }
 
 export interface FakeRoundRow {
@@ -45,6 +46,8 @@ export interface FakeRoundRow {
     player2_points: number;
     player1_outcome: string;
     player2_outcome: string;
+    player1_steps?: unknown;
+    player2_steps?: unknown;
 }
 
 export interface FinishMatchCall {

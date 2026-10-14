@@ -1,0 +1,162 @@
+<title>Round Steps Mockup</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<style>
+/* Layout concept: the round window alone, you on the left, opponent on the right, nothing else. */
+:root {
+  --bg: #0f1417;
+  --surface: #171c1f;
+  --surface-hi: #1b2023;
+  --surface-top: #262b2e;
+  --line: #3b494c;
+  --text: #dfe3e7;
+  --muted: #bac9cc;
+  --dim: #849396;
+  --cyan: #00e5ff;
+  --blue: #82b1ff;
+  --loss: #ff6b78;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 56px;
+}
+button { font: inherit; color: inherit; }
+.page { max-width: 880px; margin: 0 auto; display: flex; flex-direction: column; gap: 36px; }
+h1 { font-size: 28px; line-height: 1.2; letter-spacing: -0.01em; margin: 0 0 6px; }
+h2 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cyan); margin: 0 0 12px; font-weight: 600; }
+.lead { color: var(--muted); max-width: 68ch; margin: 0; }
+.note { color: var(--dim); font-size: 12px; margin: 8px 0 0; }
+
+/* the window sits on a plain dark stage so it reads as one thing */
+.stage { container-type: inline-size; background: #080c0e; border: 1px solid var(--line); border-radius: 14px; padding: 28px 20px; display: flex; justify-content: center; }
+.phone { width: 390px; max-width: 100%; margin: 0 auto; padding: 0; border-radius: 14px; overflow: hidden; }
+
+.sheet { width: min(680px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.55); }
+.head { padding: 14px 20px 18px; border-bottom: 1px solid var(--line); background: var(--surface-hi); }
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.cap { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+.right { display: flex; align-items: center; gap: 10px; }
+.kbd { font-family: var(--font-mono); font-size: 10px; color: var(--dim); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+.x { width: 32px; height: 32px; border-radius: 9999px; border: 1px solid var(--line); background: transparent; font-size: 18px; line-height: 1; cursor: pointer; }
+.x:hover { border-color: var(--loss); color: var(--loss); }
+.target { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.target .t { display: flex; align-items: baseline; gap: 8px; }
+.target .t b { font-family: var(--font-mono); font-size: 32px; line-height: 1; color: var(--cyan); text-shadow: 0 0 14px rgba(0,229,255,.35); font-variant-numeric: tabular-nums; }
+.tiles { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.tiles span { min-width: 38px; padding: 4px 8px; text-align: center; border-radius: 8px; background: var(--surface-top); border: 1px solid rgba(255,255,255,.08); font-family: var(--font-mono); font-size: 13px; font-weight: 600; }
+.tiles span.big { border-color: rgba(0,229,255,.4); color: var(--cyan); }
+
+.cols { display: grid; grid-template-columns: 1fr 1fr; }
+.pane { padding: 16px; min-width: 0; }
+.pane + .pane { border-left: 1px solid var(--line); }
+.who { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; min-width: 0; }
+.av { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px; border: 1.5px solid; }
+.av.me { border-color: rgba(0,229,255,.55); background: rgba(0,229,255,.1); color: var(--cyan); }
+.av.op { border-color: rgba(130,177,255,.5); background: rgba(41,98,255,.15); color: var(--blue); }
+.who div { display: flex; flex-direction: column; min-width: 0; }
+.who b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+.stat .v { font-family: var(--font-mono); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat .v.to { color: var(--loss); font-size: 14px; font-family: var(--font-body); font-weight: 700; padding-top: 2px; }
+.stat .v.nil { color: var(--dim); }
+.stepsh { margin-bottom: 6px; }
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.steps li { display: flex; align-items: center; gap: 10px; background: var(--bg); border-radius: 6px; padding: 7px 10px; }
+.steps i { font-style: normal; font-size: 10px; color: var(--dim); width: 12px; font-family: var(--font-mono); }
+.steps code { font-family: var(--font-mono); font-size: 14px; white-space: nowrap; }
+.none { margin: 0; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 6px; color: var(--dim); font-size: 12px; font-style: italic; }
+
+@container (max-width: 560px) {
+  .stage { padding: 0; background: var(--bg); }
+  .sheet { width: 100%; border: 0; border-radius: 0; box-shadow: none; }
+  .head { padding: 12px 14px 14px; }
+  .kbd { display: none; }
+  .pane { padding: 12px 10px 14px; }
+  .stats { grid-template-columns: 1fr 1fr; }
+  .stats .stat:first-child { grid-column: 1 / -1; }
+  .steps code { font-size: 12px; }
+  .steps li { padding: 5px 8px; gap: 6px; }
+}
+</style>
+
+<div class="page">
+  <header>
+    <h1>Round steps window</h1>
+    <p class="lead">What opens when you tap a round. You on the left, the opponent on the right, each with time, points, result and the steps they took. No winner label.</p>
+    <p class="note">Sample data only. The X and Esc close it and take you back to the match window.</p>
+  </header>
+
+  <section>
+    <h2>Both players answered</h2>
+    <div class="stage" id="a"></div>
+  </section>
+
+  <section>
+    <h2>One player timed out</h2>
+    <div class="stage" id="b"></div>
+  </section>
+
+  <section>
+    <h2>On a phone (full screen)</h2>
+    <div class="stage phone" id="c"></div>
+  </section>
+</div>
+
+<script>
+const ME = 'Jenel_29', OPP = 'Kira_Voss', BIG = [25, 50, 75, 100];
+const R1 = {
+  n: 1, of: 7, target: 302, tiles: [75, 8, 4, 5, 2, 10],
+  me: { time: 14.82, pts: 1.00, res: 302, steps: ['75 × 4 = 300', '300 + 2 = 302'] },
+  op: { time: 9.10,  pts: 0.50, res: 305, steps: ['75 × 4 = 300', '300 + 5 = 305'] }
+};
+const R3 = {
+  n: 3, of: 7, target: 407, tiles: [100, 25, 4, 3, 7, 2],
+  me: { time: null,  pts: 0.00, res: null, steps: [] },
+  op: { time: 17.55, pts: 0.50, res: 400, steps: ['100 × 3 = 300', '25 × 4 = 100', '300 + 100 = 400'] }
+};
+function pane(side, d) {
+  const label = side === 'me' ? 'You' : 'Opponent';
+  const name = side === 'me' ? ME : OPP;
+  const time = d.time === null ? '<div class="v to">Timeout</div>' : `<div class="v">${d.time.toFixed(2)}s</div>`;
+  const res = d.res === null ? '<div class="v nil">—</div>' : `<div class="v">${d.res}</div>`;
+  const steps = d.steps.length
+    ? `<ol class="steps">${d.steps.map((s, i) => `<li><i>${i + 1}</i><code>${s}</code></li>`).join('')}</ol>`
+    : '<p class="none">No answer submitted</p>';
+  return `<div class="pane">
+    <div class="who"><span class="av ${side}">${name[0]}</span><div><span class="cap">${label}</span><b>${name}</b></div></div>
+    <div class="stats">
+      <div class="stat"><span class="cap">Time</span>${time}</div>
+      <div class="stat"><span class="cap">Points</span><div class="v">${d.pts.toFixed(2)}</div></div>
+      <div class="stat"><span class="cap">Result</span>${res}</div>
+    </div>
+    <div class="stepsh cap">Steps</div>
+    ${steps}
+  </div>`;
+}
+function windowHTML(r) {
+  return `<div class="sheet" role="dialog" aria-label="Round ${r.n} steps">
+    <div class="head">
+      <div class="bar"><span class="cap">Round ${r.n} of ${r.of}</span>
+        <span class="right"><span class="kbd">Esc</span><button class="x" type="button" aria-label="Close">×</button></span></div>
+      <div class="target"><div class="t"><span class="cap">Target</span><b>${r.target}</b></div>
+        <div class="tiles">${r.tiles.map(x => `<span class="${BIG.includes(x) ? 'big' : ''}">${x}</span>`).join('')}</div></div>
+    </div>
+    <div class="cols">${pane('me', r.me)}${pane('op', r.op)}</div>
+  </div>`;
+}
+document.getElementById('a').innerHTML = windowHTML(R1);
+document.getElementById('b').innerHTML = windowHTML(R3);
+document.getElementById('c').innerHTML = windowHTML(R1);
+</script>

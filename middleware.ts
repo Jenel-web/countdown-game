@@ -34,6 +34,21 @@ export default async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/login', request.url));
     }
 
+    // Logged-in players without a username (e.g. first Google sign-in) must
+    // pick one before reaching any protected page. A failed lookup is not
+    // treated as "no username" so a DB hiccup can never trap anyone.
+    if (isProtected && user) {
+        const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('username')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (!error && !profile?.username) {
+            return NextResponse.redirect(new URL('/choose-username', request.url));
+        }
+    }
+
     return response;
 }
 

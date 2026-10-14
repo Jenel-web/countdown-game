@@ -212,6 +212,9 @@ describe('full match flow (real sockets, mocked Supabase)', () => {
         expect(persisted.round_number).toBe(1);
         expect(persisted.player1_result).toBe(resultValue);
         expect(persisted.player2_result).toBeNull(); // rejected submission -> stored as null, same as a real timeout
+        // The winner's validated steps are saved for the History tab; the rejected side has none.
+        expect(persisted.player1_steps).toEqual(steps);
+        expect(persisted.player2_steps).toBeNull();
     });
 
     it('driving a match to 5 points calls finish_match with the correct winner/loser and marks the row finished', async () => {
@@ -276,6 +279,7 @@ describe('full match flow (real sockets, mocked Supabase)', () => {
         const row = mockAdmin.__state.matches.find((m) => m.id === matchId);
         expect(row?.status).toBe('finished');
         expect(row?.winner_id).toBe('winner-user');
+        expect(row?.ended_at).toEqual(expect.any(String)); // History sorts by this
 
         const winnerUpdate = mockAdmin.__state.profileUpdates.find((u) => u.id === 'winner-user');
         const loserUpdate = mockAdmin.__state.profileUpdates.find((u) => u.id === 'loser-user');
@@ -317,6 +321,7 @@ describe('full match flow (real sockets, mocked Supabase)', () => {
         const row = mockAdmin.__state.matches.find((m) => m.id === matchId);
         expect(row?.status).toBe('finished');
         expect(row?.winner_id).toBe('staying-user');
+        expect(row?.ended_at).toEqual(expect.any(String));
 
         const winnerForfeitUpdate = mockAdmin.__state.profileUpdates.find((u) => u.id === 'staying-user');
         const loserForfeitUpdate = mockAdmin.__state.profileUpdates.find((u) => u.id === 'leaving-user');
