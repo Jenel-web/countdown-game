@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import { createClient } from '@/lib/supabase/client';
+import GoogleOAuthButton from '@/components/GoogleOAuthButton';
 
 const supabase = createClient();
 
@@ -12,11 +13,13 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isRegistered = searchParams.get('registered') === 'true';
+  // ?error= is set by /auth/callback when OAuth fails or is cancelled
+  const callbackError = searchParams.get('error') ?? '';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(callbackError);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,6 +124,16 @@ function LoginForm() {
           <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent group-hover:animate-[shimmer_1.5s_infinite]"></div>
         </button>
       </form>
+
+      {/* OAuth Divider */}
+      <div className="flex items-center gap-3 w-full">
+        <div className="flex-1 h-px bg-white/10" />
+        <span className="font-label-caps text-label-caps text-on-surface-variant/50 uppercase tracking-widest text-[10px]">or</span>
+        <div className="flex-1 h-px bg-white/10" />
+      </div>
+
+      {/* Google OAuth */}
+      <GoogleOAuthButton label="Continue with Google" />
 
       {/* Footer Section */}
       <footer className="text-center pt-2 border-t border-white/5">
