@@ -243,7 +243,7 @@ export default function RegisterPage() {
                 />
               </div>
               <label className="font-body-sm text-body-sm text-on-surface-variant cursor-pointer select-none" htmlFor="terms">
-                I acknowledge the <a className="text-primary-container hover:underline hover:text-primary-fixed transition-colors" href="#">Terms of Engagement</a> and <a className="text-primary-container hover:underline hover:text-primary-fixed transition-colors" href="#">Data Privacy Protocols</a>.
+                I acknowledge the <a className="text-primary-container hover:underline hover:text-primary-fixed transition-colors" href="/terms" target="_blank" rel="noopener noreferrer">Terms of Engagement</a> and <a className="text-primary-container hover:underline hover:text-primary-fixed transition-colors" href="/privacy" target="_blank" rel="noopener noreferrer">Data Privacy Protocols</a>.
               </label>
             </div>
 
