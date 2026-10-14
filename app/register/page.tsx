@@ -114,12 +114,12 @@ export default function RegisterPage() {
       <Navbar />
 
       {/* Main Registration Area */}
-      <main className="flex-grow flex items-center justify-center px-gutter md:px-container-margin py-16 relative z-10">
-        <div className="glass-card rounded-xl p-8 md:p-12 w-full max-w-md shadow-2xl relative overflow-hidden animate-[fadeIn_0.5s_ease-out]">
+      <main className="flex-grow flex items-start justify-center px-gutter md:px-container-margin pt-24 pb-10 relative z-10">
+        <div className="glass-card rounded-xl p-6 md:p-8 w-full max-w-md shadow-2xl relative overflow-hidden animate-[fadeIn_0.5s_ease-out]">
           {/* Decorative accent top line */}
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-secondary-container via-primary-container to-secondary-container"></div>
 
-          <div className="text-center mb-8">
+          <div className="text-center mb-6">
             <h1 className="font-headline-lg text-headline-lg text-on-surface font-semibold mb-2">Initialize Profile</h1>
             <p className="font-body-sm text-body-sm text-on-surface-variant">Enter your credentials to join the arena.</p>
           </div>
@@ -137,7 +137,7 @@ export default function RegisterPage() {
             </div>
           )}
 
-          <form className="space-y-6" onSubmit={handleSubmit}>
+          <form className="space-y-4" onSubmit={handleSubmit}>
             {/* Username Input */}
             <div>
               <label className="block font-label-caps text-label-caps text-outline mb-2" htmlFor="username">USERNAME / CALLSIGN</label>

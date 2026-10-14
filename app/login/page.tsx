@@ -46,7 +46,7 @@ function LoginForm() {
   };
 
   return (
-    <main className="w-full max-w-md mx-4 p-10 rounded-xl bg-surface-container-low/40 backdrop-blur-[20px] border border-primary-container/15 relative z-10 flex flex-col gap-8 shadow-[0_0_60px_rgba(0,229,255,0.03)] animate-[fadeIn_0.5s_ease-out]">
+    <main className="w-full max-w-md mx-4 p-8 rounded-xl bg-surface-container-low/40 backdrop-blur-[20px] border border-primary-container/15 relative z-10 flex flex-col gap-6 shadow-[0_0_60px_rgba(0,229,255,0.03)] animate-[fadeIn_0.5s_ease-out]">
       {/* Header Section */}
       <header className="text-center flex flex-col gap-2 items-center">
         {/* Brand Mark */}
@@ -76,7 +76,7 @@ function LoginForm() {
       )}
 
       {/* Form Section */}
-      <form className="flex flex-col gap-6 w-full" onSubmit={handleSubmit}>
+      <form className="flex flex-col gap-4 w-full" onSubmit={handleSubmit}>
         {/* Username Input Group */}
         <div className="flex flex-col gap-2 relative group">
           <label className="font-label-caps text-label-caps text-on-surface-variant uppercase ml-1 transition-colors group-focus-within:text-primary-container" htmlFor="username">Username</label>
@@ -165,7 +165,7 @@ export default function LoginPage() {
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)]"></div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center py-12 relative z-10">
+      <div className="flex-1 flex items-start justify-center pt-24 pb-10 relative z-10">
         <Suspense fallback={<div className="text-on-surface-variant text-xs font-mono">Loading form...</div>}>
           <LoginForm />
         </Suspense>
