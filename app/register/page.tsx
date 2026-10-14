@@ -6,12 +6,14 @@ import { createClient } from '@/lib/supabase/client';
 import { useState } from 'react';
 import Navbar from '@/components/Navbar';
 import GoogleOAuthButton from '@/components/GoogleOAuthButton';
+import { usernameToEmail, validateUsername } from '@/lib/auth/username';
+import { PASSWORD_RULES, isPasswordValid, passedRuleCount } from '@/lib/auth/password';
 
 const supabase = createClient();
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreeTerms, setAgreeTerms] = useState(false);
@@ -20,25 +22,27 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState('');
 
   // Password strength visual indicator
-  const getStrength = (pw: string) => {
-    if (!pw) return 0;
-    let score = 0;
-    if (pw.length >= 6) score++;
-    if (pw.length >= 10) score++;
-    if (/[A-Z]/.test(pw)) score++;
-    if (/[0-9]/.test(pw)) score++;
-    return score; // 0 to 4
-  };
-
-  const strength = getStrength(password);
+  // Bar fills as more of the 5 checklist rules pass (0 to 4 segments)
+  const strength = Math.min(4, passedRuleCount(password));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
 
-    if (!email || !password || !confirmPassword) {
+    if (!username || !password || !confirmPassword) {
       setError('Please fill in all fields.');
+      return;
+    }
+
+    const usernameError = validateUsername(username);
+    if (usernameError) {
+      setError(usernameError);
+      return;
+    }
+
+    if (!isPasswordValid(password)) {
+      setError('Password does not meet all the requirements below.');
       return;
     }
 
@@ -54,14 +58,28 @@ export default function RegisterPage() {
 
     setLoading(true);
 
+    const email = usernameToEmail(username);
+
     const { data, error: authError } = await supabase.auth.signUp({
-      email: email, // same email/username decision as login
+      email, // synthetic email derived from the username
       password,
     });
 
     if (authError) {
       setLoading(false);
-      setError(authError.message);
+      setError(
+        /already|registered|exists/i.test(authError.message)
+          ? 'That username is already taken.'
+          : authError.message
+      );
+      return;
+    }
+
+    // With email confirmation off, Supabase returns a fake user with no
+    // identities when the address already exists.
+    if (data.user && data.user.identities?.length === 0) {
+      setLoading(false);
+      setError('That username is already taken.');
       return;
     }
 
@@ -129,9 +147,11 @@ export default function RegisterPage() {
                   id="username"
                   type="text"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter username"
+                  autoComplete="username"
+                  spellCheck={false}
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Choose a username (3-20 letters, numbers, _)"
                   className="w-full bg-[#0A192F] border border-outline-variant rounded py-3 pl-10 pr-4 text-on-surface font-mono-metric text-mono-metric focus:outline-none focus:ring-0 input-glow transition-all"
                 />
               </div>
@@ -170,6 +190,23 @@ export default function RegisterPage() {
                   ></div>
                 ))}
               </div>
+              {/* Password Requirements Checklist */}
+              <ul className="mt-3 space-y-1" aria-label="Password requirements">
+                {PASSWORD_RULES.map((rule) => {
+                  const met = rule.test(password);
+                  return (
+                    <li
+                      key={rule.id}
+                      className={`flex items-center gap-2 text-xs font-mono transition-colors duration-200 ${met ? 'text-primary-container' : 'text-on-surface-variant'}`}
+                    >
+                      <span className="material-symbols-outlined text-sm">
+                        {met ? 'check_circle' : 'radio_button_unchecked'}
+                      </span>
+                      <span>{rule.label}</span>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
 
             {/* Confirm Password Input */}
@@ -187,6 +224,11 @@ export default function RegisterPage() {
                   className="w-full bg-[#0A192F] border border-outline-variant rounded py-3 pl-10 pr-4 text-on-surface font-mono-metric text-mono-metric focus:outline-none focus:ring-0 input-glow transition-all"
                 />
               </div>
+              {confirmPassword && (
+                <p className={`mt-2 text-xs font-mono ${password === confirmPassword ? 'text-primary-container' : 'text-error'}`}>
+                  {password === confirmPassword ? 'Passwords match' : 'Passwords do not match'}
+                </p>
+              )}
             </div>
 
             {/* Terms Checkbox */}

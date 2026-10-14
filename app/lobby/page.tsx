@@ -264,9 +264,9 @@ export default function LobbyPage() {
                 <div>
                   <h1
                     className="font-headline-lg text-lg sm:text-headline-lg text-primary font-bold truncate max-w-[240px]"
-                    title={profile.email || ""}
+                    title={profile.email?.split("@")[0] || ""}
                   >
-                    {profile.email}
+                    {profile.email?.split("@")[0]}
                   </h1>
                   <span className="font-label-caps text-label-caps text-on-surface-variant mt-1 inline-block px-3 py-1 bg-surface-container rounded-full">
                     Operative
