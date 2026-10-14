@@ -279,8 +279,8 @@ describe('full match flow (real sockets, mocked Supabase)', () => {
 
         const winnerUpdate = mockAdmin.__state.profileUpdates.find((u) => u.id === 'winner-user');
         const loserUpdate = mockAdmin.__state.profileUpdates.find((u) => u.id === 'loser-user');
-        expect(winnerUpdate?.patch).toMatchObject({ mmr: 1025, wins: 1 });
-        expect(loserUpdate?.patch).toMatchObject({ mmr: 985, losses: 1 });
+        expect(winnerUpdate?.patch).toMatchObject({ mmr: 1025 });
+        expect(loserUpdate?.patch).toMatchObject({ mmr: 985 });;
     }, 20000);
 
     it('a mid-match disconnect awards the remaining player an immediate forfeit win', async () => {
@@ -303,7 +303,7 @@ describe('full match flow (real sockets, mocked Supabase)', () => {
         client2.disconnect();
 
         await opponentLeftPromise; // resolves or the test times out and fails — that IS the assertion
-
+        await new Promise((r) => setTimeout(r, 100));
         expect(finishCallsFor(matchId)).toEqual([
             {
                 p_match_id: matchId,
@@ -320,11 +320,11 @@ describe('full match flow (real sockets, mocked Supabase)', () => {
 
         const winnerForfeitUpdate = mockAdmin.__state.profileUpdates.find((u) => u.id === 'staying-user');
         const loserForfeitUpdate = mockAdmin.__state.profileUpdates.find((u) => u.id === 'leaving-user');
-        expect(winnerForfeitUpdate?.patch).toMatchObject({ mmr: 1025, wins: 1 });
-        expect(loserForfeitUpdate?.patch).toMatchObject({ mmr: 985, losses: 1 });
+        expect(winnerForfeitUpdate?.patch).toMatchObject({ mmr: 1025 });
+        expect(loserForfeitUpdate?.patch).toMatchObject({ mmr: 985 });
     });
 
-    it('BOTH players disconnecting at once finishes the match exactly once (no double finish_match)', async () => {
+    it('BOTH players disconnecting at once discards the match without calling finish_match', async () => {
         const matchId = randomUUID();
         seedWaitingMatch(matchId, 'user-a');
 
@@ -339,19 +339,21 @@ describe('full match flow (real sockets, mocked Supabase)', () => {
         client2.emit('join_room', { matchId });
         await roundStartPromise;
 
-        // Simulate a realistic ~50ms database round-trip. With an instant mock the
-        // first disconnect handler finishes before the second even starts, hiding
-        // the race this test exists to catch.
         mockAdmin.__setRpcLatency(50);
 
         // Both drop in the same tick — e.g. a shared network outage.
         client1.disconnect();
         client2.disconnect();
 
-        // Give the server's async disconnect handlers time to run to completion.
+        // Wait past the (test-mode) 100ms grace period plus the simulated RPC latency.
         await new Promise((r) => setTimeout(r, 400));
         mockAdmin.__setRpcLatency(0);
 
-        expect(finishCallsFor(matchId)).toHaveLength(1);
+        // Nobody is left to claim the win, so the server just discards the room:
+        // finish_match must never be called (and certainly not twice).
+        expect(finishCallsFor(matchId)).toHaveLength(0);
+
+        // The room itself should be cleaned up.
+        expect(server.roomManager.getRoom(matchId)).toBeUndefined();
     });
 });

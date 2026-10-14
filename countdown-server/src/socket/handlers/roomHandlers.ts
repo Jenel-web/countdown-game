@@ -24,8 +24,9 @@ import type {
 type AppServer = Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
 
-/** How long a disconnected player has to come back before they forfeit. */
-const RECONNECT_GRACE_MS = 15_000;
+/** How long a disconnected player has to come back before they forfeit.
+ *  Kept short under test so the disconnect tests don't wait 15 real seconds. */
+const RECONNECT_GRACE_MS = process.env.NODE_ENV === 'test' ? 100 : 15_000;
 
 /**
  * Runs when a disconnected player's grace period expires without them

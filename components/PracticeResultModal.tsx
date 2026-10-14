@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trophy,
   Target,
@@ -10,12 +10,9 @@ import {
   Users,
   RotateCcw,
   Sparkles,
-} from "lucide-react";
-import type { BestSolution } from "@/lib/gameEngine";
-import type {
-  PracticeFeedback,
-  PracticeCategory,
-} from "@/lib/practiceFeedback";
+} from 'lucide-react';
+import type { BestSolution } from '@/lib/gameEngine';
+import type { PracticeFeedback, PracticeCategory } from '@/lib/practiceFeedback';
 
 export interface PracticeResultModalProps {
   isOpen: boolean;
@@ -48,46 +45,43 @@ const CATEGORY_STYLE: Record<
 > = {
   exact: {
     icon: Trophy,
-    text: "text-emerald-300",
-    border: "border-emerald-400/50",
-    glow: "shadow-[0_0_40px_rgba(52,211,153,0.25)]",
-    banner: "from-emerald-500/20 via-[#00E5FF]/10 to-transparent",
-    iconBg: "bg-emerald-500/15 border-emerald-400/40",
+    text: 'text-emerald-300',
+    border: 'border-emerald-400/50',
+    glow: 'shadow-[0_0_40px_rgba(52,211,153,0.25)]',
+    banner: 'from-emerald-500/20 via-[#00E5FF]/10 to-transparent',
+    iconBg: 'bg-emerald-500/15 border-emerald-400/40',
   },
   close: {
     icon: Target,
-    text: "text-amber-300",
-    border: "border-amber-400/50",
-    glow: "shadow-[0_0_40px_rgba(251,191,36,0.2)]",
-    banner: "from-amber-500/20 via-[#2962FF]/10 to-transparent",
-    iconBg: "bg-amber-500/15 border-amber-400/40",
+    text: 'text-amber-300',
+    border: 'border-amber-400/50',
+    glow: 'shadow-[0_0_40px_rgba(251,191,36,0.2)]',
+    banner: 'from-amber-500/20 via-[#2962FF]/10 to-transparent',
+    iconBg: 'bg-amber-500/15 border-amber-400/40',
   },
   far: {
     icon: TrendingUp,
-    text: "text-[#00E5FF]",
-    border: "border-[#00E5FF]/40",
-    glow: "shadow-[0_0_40px_rgba(0,229,255,0.2)]",
-    banner: "from-[#2962FF]/25 via-[#00E5FF]/10 to-transparent",
-    iconBg: "bg-[#00E5FF]/10 border-[#00E5FF]/40",
+    text: 'text-[#00E5FF]',
+    border: 'border-[#00E5FF]/40',
+    glow: 'shadow-[0_0_40px_rgba(0,229,255,0.2)]',
+    banner: 'from-[#2962FF]/25 via-[#00E5FF]/10 to-transparent',
+    iconBg: 'bg-[#00E5FF]/10 border-[#00E5FF]/40',
   },
   invalid: {
     icon: HelpCircle,
-    text: "text-on-surface-variant",
-    border: "border-[#2962FF]/40",
-    glow: "shadow-[0_0_30px_rgba(41,98,255,0.15)]",
-    banner: "from-[#2962FF]/15 via-transparent to-transparent",
-    iconBg: "bg-[#2962FF]/10 border-[#2962FF]/40",
+    text: 'text-on-surface-variant',
+    border: 'border-[#2962FF]/40',
+    glow: 'shadow-[0_0_30px_rgba(41,98,255,0.15)]',
+    banner: 'from-[#2962FF]/15 via-transparent to-transparent',
+    iconBg: 'bg-[#2962FF]/10 border-[#2962FF]/40',
   },
 };
 
 function plural(n: number) {
-  return `${n} step${n === 1 ? "" : "s"}`;
+  return `${n} step${n === 1 ? '' : 's'}`;
 }
 
-function buildStepsMessage(
-  stepsUsed: number,
-  best: BestSolution | null
-): string | null {
+function buildStepsMessage(stepsUsed: number, best: BestSolution | null): string | null {
   if (!best) return null;
   const shortest = best.steps.length;
   if (stepsUsed === shortest) {
@@ -111,9 +105,7 @@ export default function PracticeResultModal({
   const Icon = style.icon;
   const diff = result === null ? null : Math.abs(result - target);
   const stepsMessage =
-    feedback.category === "exact"
-      ? buildStepsMessage(stepsUsed, bestSolution)
-      : null;
+    feedback.category === 'exact' ? buildStepsMessage(stepsUsed, bestSolution) : null;
 
   const stepCount = bestSolution?.steps.length ?? 0;
   const rowCount = Math.max(1, Math.min(STEPS_PER_COLUMN, stepCount));
@@ -135,7 +127,7 @@ export default function PracticeResultModal({
             initial={{ opacity: 0, scale: 0.92, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 20 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className={`glass-panel relative w-full max-w-2xl my-auto rounded-2xl border ${style.border} ${style.glow} overflow-hidden`}
           >
             {/* ── Header banner ─────────────────────────────────────── */}
@@ -156,9 +148,7 @@ export default function PracticeResultModal({
                 <Icon className={`w-7 h-7 ${style.text}`} />
               </div>
 
-              <h2
-                className={`relative text-2xl sm:text-3xl font-black tracking-tight ${style.text}`}
-              >
+              <h2 className={`relative text-2xl sm:text-3xl font-black tracking-tight ${style.text}`}>
                 {feedback.title}
               </h2>
               <p className="relative text-sm text-on-surface-variant max-w-sm">
@@ -188,17 +178,15 @@ export default function PracticeResultModal({
                   Your Result
                 </span>
                 <span className="font-mono text-2xl sm:text-3xl font-black text-on-surface mt-1">
-                  {result === null ? "—" : result}
+                  {result === null ? '—' : result}
                 </span>
               </div>
               <div className="rounded-xl bg-[#0A192F]/70 border border-[#2962FF]/30 p-3 flex flex-col items-center">
                 <span className="font-label-caps text-label-caps text-on-surface-variant">
                   Difference
                 </span>
-                <span
-                  className={`font-mono text-2xl sm:text-3xl font-black mt-1 ${style.text}`}
-                >
-                  {diff === null ? "—" : diff}
+                <span className={`font-mono text-2xl sm:text-3xl font-black mt-1 ${style.text}`}>
+                  {diff === null ? '—' : diff}
                 </span>
               </div>
             </div>
@@ -223,16 +211,14 @@ export default function PracticeResultModal({
                 <>
                   <p className="text-xs text-on-surface-variant">
                     {bestSolution.diff === 0
-                      ? `Shortest way to reach the target · ${plural(
-                          stepCount
-                        )}`
+                      ? `Shortest way to reach the target · ${plural(stepCount)}`
                       : `No exact solution exists. Closest possible: ${bestSolution.finalValue} (off by ${bestSolution.diff})`}
                   </p>
 
                   {stepCount === 0 ? (
                     <p className="text-sm text-on-surface py-1">
                       {bestSolution.diff === 0
-                        ? "The target is already one of your starting tiles."
+                        ? 'The target is already one of your starting tiles.'
                         : `The closest you can get is a starting tile: ${bestSolution.finalValue}.`}
                     </p>
                   ) : (
@@ -245,33 +231,26 @@ export default function PracticeResultModal({
                         return (
                           <li
                             key={i}
-                            className={`flex items-center gap-3 rounded-lg px-3 py-2 border transition-colors ${
-                              isLast
-                                ? "bg-[#00E5FF]/10 border-[#00E5FF]/60 shadow-[0_0_14px_rgba(0,229,255,0.25)]"
-                                : "bg-[#0A192F]/70 border-[#2962FF]/30"
-                            }`}
+                            className={`flex items-center gap-3 rounded-lg px-3 py-2 border transition-colors ${isLast
+                              ? 'bg-[#00E5FF]/10 border-[#00E5FF]/60 shadow-[0_0_14px_rgba(0,229,255,0.25)]'
+                              : 'bg-[#0A192F]/70 border-[#2962FF]/30'
+                              }`}
                           >
                             <span
-                              className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold font-mono ${
-                                isLast
-                                  ? "bg-[#00E5FF] text-[#0A192F]"
-                                  : "bg-[#2962FF]/20 text-[#82B1FF]"
-                              }`}
+                              className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold font-mono ${isLast
+                                ? 'bg-[#00E5FF] text-[#0A192F]'
+                                : 'bg-[#2962FF]/20 text-[#82B1FF]'
+                                }`}
                             >
                               {i + 1}
                             </span>
                             <span className="font-mono text-sm text-on-surface whitespace-nowrap">
-                              {s.a}{" "}
-                              <span className="text-[#00E5FF] font-bold">
-                                {s.op}
-                              </span>{" "}
-                              {s.b}{" "}
-                              <span className="text-on-surface-variant">=</span>{" "}
+                              {s.a}{' '}
+                              <span className="text-[#00E5FF] font-bold">{s.op}</span> {s.b}{' '}
+                              <span className="text-on-surface-variant">=</span>{' '}
                               <span
                                 className={
-                                  isLast
-                                    ? "font-black text-[#00E5FF]"
-                                    : "font-semibold"
+                                  isLast ? 'font-black text-[#00E5FF]' : 'font-semibold'
                                 }
                               >
                                 {s.result}
