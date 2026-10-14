@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import { createClient } from '@/lib/supabase/client';
 import GoogleOAuthButton from '@/components/GoogleOAuthButton';
+import { loginIdentifierToEmail } from '@/lib/auth/username';
 
 const supabase = createClient();
 
@@ -31,7 +32,10 @@ function LoginForm() {
     }
 
     setLoading(true);
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: loginIdentifierToEmail(email),
+      password,
+    });
     setLoading(false);
 
     if (authError) {
