@@ -274,7 +274,6 @@ export function findBestSolution(values: number[], target: number): BestSolution
 }
 
 
-console.log('TEST checkSolvability:', checkSolvability([25, 50, 75, 100, 3, 6], 952));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Round Scoring Engine

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { useState } from 'react';
 import Navbar from '@/components/Navbar';
+import GoogleOAuthButton from '@/components/GoogleOAuthButton';
 
 const supabase = createClient();
 
@@ -213,6 +214,17 @@ export default function RegisterPage() {
               <span>{loading ? 'INITIALIZING...' : 'CREATE ACCOUNT'}</span>
               <span className="material-symbols-outlined text-sm">arrow_forward</span>
             </button>
+
+            {/* OAuth Divider */}
+            <div className="flex items-center gap-3 w-full mt-2">
+              <div className="flex-1 h-px bg-white/10" />
+              <span className="font-label-caps text-label-caps text-on-surface-variant/50 uppercase tracking-widest text-[10px]">or</span>
+              <div className="flex-1 h-px bg-white/10" />
+            </div>
+
+            {/* Google OAuth — creates a new profile on first sign-in,
+                or signs the returning user in without touching their data */}
+            <GoogleOAuthButton label="Sign up with Google" />
 
             {/* Login Link */}
             <div className="text-center mt-6">
