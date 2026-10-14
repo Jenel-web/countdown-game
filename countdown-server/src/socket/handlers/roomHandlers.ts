@@ -13,6 +13,7 @@
 import type { Server, Socket } from 'socket.io';
 import { RoomManager } from '../../rooms/RoomManager';
 import { adminClient } from '../../supabase/adminClient';
+import { markMatchEnded } from '../../supabase/matchEnd';
 import { startNextRound } from './roundHandlers';
 import type {
   ClientToServerEvents,
@@ -83,6 +84,8 @@ async function forfeitMatch(
 
   if (finishError) {
     console.error(`[match ${matchId}] finish_match RPC failed on disconnect forfeit:`, finishError);
+  } else {
+    await markMatchEnded(matchId);
   }
 
   // Update MMR ratings AND win/loss records for forfeit resolution.

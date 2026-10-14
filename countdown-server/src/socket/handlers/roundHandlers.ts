@@ -22,6 +22,7 @@
 import type { Server, Socket } from 'socket.io';
 import { RoomManager } from '../../rooms/RoomManager';
 import { adminClient } from '../../supabase/adminClient';
+import { markMatchEnded } from '../../supabase/matchEnd';
 import {
   generateTilePool,
   generateTarget,
@@ -140,6 +141,10 @@ export async function evaluateRound(
     player2_points: scoreResult.player2.pointsRaw,
     player1_outcome: scoreResult.player1.outcome,
     player2_outcome: scoreResult.player2.outcome,
+    // Validated steps each player took, shown in the History tab. Null when
+    // nobody submitted (timeout) so old and empty rounds look the same.
+    player1_steps: p1sub.steps?.length ? p1sub.steps : null,
+    player2_steps: p2sub.steps?.length ? p2sub.steps : null,
   });
 
   if (roundInsertError) {
@@ -205,6 +210,8 @@ export async function evaluateRound(
 
     if (finishError) {
       console.error(`[match ${matchId}] finish_match RPC failed:`, finishError);
+    } else {
+      await markMatchEnded(matchId);
     }
 
     // Update MMR ratings AND win/loss records.

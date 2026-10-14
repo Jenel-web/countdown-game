@@ -3,6 +3,7 @@ import {
   validateUsername,
   usernameToEmail,
   loginIdentifierToEmail,
+  displayName,
 } from './username';
 import { isPasswordValid, passedRuleCount, PASSWORD_RULES } from './password';
 
@@ -17,6 +18,18 @@ describe('username', () => {
     for (const n of ['ab', 'a'.repeat(21), 'has space', 'a@b.com', 'no-dash', '']) {
       expect(validateUsername(n)).not.toBeNull();
     }
+  });
+
+  it('rejects reserved usernames regardless of case', () => {
+    for (const n of ['admin', 'Admin', 'COUNTDOWN']) {
+      expect(validateUsername(n)).not.toBeNull();
+    }
+  });
+
+  it('displayName prefers the username and falls back to the email prefix', () => {
+    expect(displayName({ username: 'Jenel_29', email: 'x@gmail.com' })).toBe('Jenel_29');
+    expect(displayName({ username: null, email: 'x@gmail.com' })).toBe('x');
+    expect(displayName(null, 'You')).toBe('You');
   });
 
   it('maps usernames to a lowercase synthetic email', () => {

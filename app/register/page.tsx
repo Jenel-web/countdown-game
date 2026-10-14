@@ -87,7 +87,7 @@ export default function RegisterPage() {
     if (data.user) {
       const { error: profileError } = await supabase
         .from('profiles')
-        .upsert({ id: data.user.id, email: email }, { onConflict: 'id' });
+        .upsert({ id: data.user.id, email: email, username: username.trim() }, { onConflict: 'id' });
 
       if (profileError && profileError.code !== '23505' && !profileError.message?.includes('profiles_pkey')) {
         console.warn('Profile sync warning:', profileError.message);

@@ -9,8 +9,9 @@ import { createClient } from '@/lib/supabase/server';
  *   1. Exchanges the one-time `code` for a Supabase session (sets cookies).
  *   2. Ensures a `profiles` row exists for the newly authenticated user
  *      without overwriting any existing MMR / win-loss / match-history data.
- *   3. Redirects the user to /lobby on success, or back to /login with an
- *      error message on failure.
+ *   3. Redirects the user to /choose-username if their profile has no
+ *      username yet, otherwise to /lobby. On failure, back to /login with an
+ *      error message.
  *
  * Security notes:
  *   - The `code` param is a one-time, short-lived value issued by Supabase.
@@ -79,6 +80,17 @@ export async function GET(request: NextRequest) {
     // A profile sync failure is non-fatal for sign-in, but we log it so it
     // shows up in server logs / Supabase log drain.
     console.warn('[auth/callback] Profile upsert warning:', profileError.message);
+  }
+
+  // First-time (or not-yet-named) players must pick a username before playing.
+  const { data: profileRow } = await supabase
+    .from('profiles')
+    .select('username')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (!profileRow?.username) {
+    return NextResponse.redirect(`${origin}/choose-username`);
   }
 
   // Success — send user into the game

@@ -1,0 +1,372 @@
+<title>History Tab Mockup</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<style>
+/* Layout concept: three clickable frames of the same screen (list, match + round windows, phone),
+   built from the Countdown Arena tokens so the preview looks like the real app. */
+:root {
+  --bg: #0f1417;
+  --surface: #171c1f;
+  --surface-hi: #1b2023;
+  --surface-top: #262b2e;
+  --line: #3b494c;
+  --text: #dfe3e7;
+  --muted: #bac9cc;
+  --dim: #849396;
+  --cyan: #00e5ff;
+  --blue: #82b1ff;
+  --win: #4be277;
+  --loss: #ff6b78;
+  --warn: #f5c26b;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 56px;
+}
+button { font: inherit; color: inherit; }
+.page { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
+h1 { font-size: 28px; line-height: 1.2; letter-spacing: -0.01em; margin: 0 0 6px; text-wrap: balance; }
+h2 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cyan); margin: 0 0 12px; font-weight: 600; }
+.lead { color: var(--muted); max-width: 68ch; margin: 0; }
+.sample { color: var(--dim); font-size: 12px; margin-top: 8px; }
+
+/* ---------- frame (browser window) ---------- */
+.frame { container-type: inline-size; position: relative; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.frame.tall { height: 780px; display: flex; flex-direction: column; }
+.phone { width: 390px; max-width: 100%; margin: 0 auto; }
+.scroll { overflow: auto; flex: 1; min-height: 0; }
+
+.nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,.07); background: rgba(23,28,31,.9); }
+.logo { display: flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: -0.01em; }
+.logo .bolt { width: 30px; height: 30px; border-radius: 8px; background: var(--cyan); display: grid; place-items: center; box-shadow: 0 0 16px rgba(0,229,255,.35); }
+.logo em { font-style: normal; color: #c3f5ff; margin-left: 2px; }
+.tabs { display: flex; gap: 4px; }
+.tabs span { padding: 6px 14px; border-radius: 9999px; color: var(--muted); font-weight: 500; font-size: 13px; }
+.tabs span.on { background: var(--surface-top); color: var(--cyan); text-shadow: 0 0 8px rgba(0,240,255,.6); }
+.me { display: flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 9999px; background: var(--surface-top); font-family: var(--font-mono); font-size: 12px; color: var(--cyan); }
+.me i { width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px rgba(0,229,255,.8); }
+
+.list { padding: 28px 24px 36px; max-width: 900px; margin: 0 auto; }
+.list h3 { margin: 0; font-size: 28px; letter-spacing: -0.01em; }
+.list .sub { color: var(--muted); margin: 2px 0 20px; }
+.rows { display: flex; flex-direction: column; gap: 12px; }
+
+/* ---------- match row: info line on top, players + score below ---------- */
+.row { display: flex; flex-direction: column; gap: 14px; width: 100%; text-align: left; padding: 14px 18px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.row:hover { border-color: rgba(0,229,255,.5); box-shadow: 0 0 18px rgba(0,229,255,.08); }
+.meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,.07); }
+.meta .d { color: var(--text); font-weight: 500; }
+.meta .sep { color: var(--dim); margin: 0 6px; }
+.pill { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; color: var(--muted); border: 1px solid var(--line); border-radius: 9999px; padding: 2px 10px; white-space: nowrap; }
+.pill.forfeit { color: var(--warn); border-color: rgba(245,194,107,.55); background: rgba(245,194,107,.08); }
+
+.vs3 { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 14px; }
+.side { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.side.l { justify-content: flex-end; }
+.nm { font-weight: 600; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.side.l .nm { text-align: right; }
+.av { flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 16px; border: 1.5px solid; }
+.av.me { border-color: rgba(0,229,255,.55); background: rgba(0,229,255,.1); color: var(--cyan); }
+.av.op { border-color: rgba(130,177,255,.5); background: rgba(41,98,255,.15); color: var(--blue); }
+.res { display: flex; flex-direction: column; align-items: center; min-width: 110px; padding: 6px 14px; border-radius: 10px; border: 1px solid; }
+.res b { font-family: var(--font-mono); font-size: 22px; font-weight: 700; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.res small { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; }
+.res.win { color: var(--win); background: rgba(75,226,119,.12); border-color: rgba(75,226,119,.45); }
+.res.loss { color: var(--loss); background: rgba(255,107,120,.12); border-color: rgba(255,107,120,.45); }
+
+/* ---------- windows ---------- */
+.scrim { position: absolute; inset: 0; background: rgba(8,12,14,.8); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.scrim.top { background: rgba(4,7,9,.82); }
+.sheet { width: min(820px, 100%); max-height: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.55); }
+.sheet.sm { width: min(680px, 100%); }
+.sheet-head { padding: 14px 20px 18px; border-bottom: 1px solid var(--line); background: var(--surface-hi); }
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; font-size: 12px; color: var(--muted); }
+.bar .meta { border: 0; padding: 0; flex: 1; }
+.bar .right { display: flex; align-items: center; gap: 10px; }
+.cap { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+.kbd { font-family: var(--font-mono); font-size: 10px; color: var(--dim); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+.x { width: 32px; height: 32px; border-radius: 9999px; border: 1px solid var(--line); background: transparent; font-size: 18px; line-height: 1; cursor: pointer; }
+.x:hover { border-color: var(--loss); color: var(--loss); }
+.sheet-body { overflow: auto; padding: 16px 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+.hint { margin: 0 0 2px; color: var(--dim); font-size: 12px; }
+
+/* round row (match window) */
+.rrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, auto) minmax(0, 1fr); align-items: center; gap: 14px; width: 100%; text-align: left; padding: 14px 16px; background: var(--surface-hi); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; transition: border-color .15s, background .15s; }
+.rrow:hover { border-color: rgba(0,229,255,.5); background: var(--surface-top); }
+.rside { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rside.l { align-items: flex-end; text-align: right; }
+.rside.r { align-items: flex-start; text-align: left; }
+.rside .wt { min-height: 18px; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 800; color: var(--cyan); }
+.rside .tm { font-family: var(--font-mono); font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.rside .tm.to { color: var(--loss); font-family: var(--font-body); font-size: 15px; font-weight: 700; }
+.rside .pt { font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
+.rmid { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.rmid .rn { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; color: var(--muted); }
+.rmid .tgt { display: flex; align-items: baseline; gap: 6px; }
+.rmid .tgt b { font-family: var(--font-mono); font-size: 24px; color: var(--cyan); line-height: 1; font-variant-numeric: tabular-nums; }
+.rmid .more { font-size: 11px; color: var(--dim); }
+.rrow:hover .more { color: var(--cyan); }
+.rmid .draw { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; color: var(--dim); border: 1px dashed var(--line); border-radius: 9999px; padding: 1px 8px; }
+
+.tiles { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.tiles span { min-width: 38px; padding: 4px 8px; text-align: center; border-radius: 8px; background: var(--surface-top); border: 1px solid rgba(255,255,255,.08); font-family: var(--font-mono); font-size: 13px; font-weight: 600; }
+.tiles span.big { border-color: rgba(0,229,255,.4); color: var(--cyan); }
+.tiles.mini span { min-width: 30px; padding: 2px 6px; font-size: 11px; }
+
+/* round window (steps) */
+.rhead { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.rhead .t { display: flex; align-items: baseline; gap: 8px; }
+.rhead .t b { font-family: var(--font-mono); font-size: 32px; line-height: 1; color: var(--cyan); text-shadow: 0 0 14px rgba(0,229,255,.35); }
+.cols { display: grid; grid-template-columns: 1fr 1fr; }
+.pane { padding: 16px; min-width: 0; }
+.pane + .pane { border-left: 1px solid var(--line); }
+.phead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; min-height: 26px; }
+.who { display: flex; flex-direction: column; min-width: 0; }
+.who b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge { flex: none; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 800; padding: 3px 10px; border-radius: 9999px; background: var(--cyan); color: #00363d; box-shadow: 0 0 12px rgba(0,229,255,.4); }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+.stat .v { font-family: var(--font-mono); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat .v.to { color: var(--loss); font-size: 14px; font-family: var(--font-body); font-weight: 700; padding-top: 2px; }
+.stat .v.nil { color: var(--dim); }
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.steps li { display: flex; align-items: center; gap: 10px; background: var(--bg); border-radius: 6px; padding: 7px 10px; }
+.steps i { font-style: normal; font-size: 10px; color: var(--dim); width: 12px; font-family: var(--font-mono); }
+.steps code { font-family: var(--font-mono); font-size: 14px; white-space: nowrap; }
+.none { margin: 0; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 6px; color: var(--dim); font-size: 12px; font-style: italic; }
+
+/* ---------- narrow: windows become full screen ---------- */
+@container (max-width: 640px) {
+  .nav .logo span.txt { display: none; }
+  .tabs span { padding: 6px 10px; }
+  .me span.u { max-width: 70px; overflow: hidden; text-overflow: ellipsis; }
+  .list { padding: 20px 14px 28px; }
+  .row { padding: 12px 12px 14px; }
+  .vs3 { gap: 8px; }
+  .av { width: 32px; height: 32px; font-size: 12px; }
+  .nm { font-size: 14px; }
+  .res { min-width: 84px; padding: 5px 8px; }
+  .res b { font-size: 17px; }
+  .scrim { padding: 0; background: var(--bg); backdrop-filter: none; }
+  .scrim.top { background: var(--bg); }
+  .sheet, .sheet.sm { width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none; }
+  .sheet-head { padding: 12px 14px 14px; }
+  .sheet-body { padding: 12px 12px 18px; }
+  .kbd { display: none; }
+  .rrow { gap: 8px; padding: 12px 10px; }
+  .rrow .tiles { display: none; }
+  .rside .tm { font-size: 15px; }
+  .rmid .tgt b { font-size: 20px; }
+  .pane { padding: 12px 10px 14px; }
+  .stats { grid-template-columns: 1fr 1fr; }
+  .stats .stat:first-child { grid-column: 1 / -1; }
+  .steps code { font-size: 12px; }
+  .steps li { padding: 5px 8px; gap: 6px; }
+}
+
+/* ---------- notes + states ---------- */
+.states { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; min-width: 0; }
+.card h4 { margin: 0 0 10px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+.empty { text-align: center; padding: 22px 8px; color: var(--muted); }
+.empty b { display: block; color: var(--text); font-size: 16px; margin-bottom: 4px; }
+.decisions { margin: 0; padding-left: 18px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; max-width: 80ch; }
+.decisions strong { color: var(--text); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .row, .rrow { transition: none; } }
+</style>
+
+<div class="page">
+  <header>
+    <h1>History tab mockup</h1>
+    <p class="lead">Clickable preview of the new flow: tap a match, tap a round, see the steps. Everything is sample data and nothing reads the database yet.</p>
+    <p class="sample">Click a match row, then a round. X, Esc, or a click outside closes the top-most window.</p>
+  </header>
+
+  <section>
+    <h2>1 · History page (try it)</h2>
+    <div class="frame tall" id="f1"></div>
+  </section>
+
+  <section>
+    <h2>2 · Match window, then round window on top of it</h2>
+    <div class="frame tall" id="f2"></div>
+  </section>
+
+  <section>
+    <h2>3 · Phone: both windows full screen</h2>
+    <div class="frame phone tall" id="f3"></div>
+  </section>
+
+  <section>
+    <h2>4 · Other states</h2>
+    <div class="states">
+      <div class="card"><h4>No matches yet</h4><div class="empty"><b>No matches yet</b>Finish a match in the Arena and it will show up here.</div></div>
+      <div class="card"><h4>Older match: steps not recorded</h4><div id="oldPane"></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What I understood</h2>
+    <ul class="decisions">
+      <li><strong>Match row:</strong> top line has date and time, number of rounds and the match status (Completed, or Forfeit). Below it, your name on the left, the opponent on the right and the score in the middle, green for a win and red for a loss.</li>
+      <li><strong>Click a match:</strong> a window opens with the same header and one compact row per round. Each round row shows the target and numbers, and each player's time (or Timeout), points and a Winner label. No steps yet.</li>
+      <li><strong>Click a round:</strong> a second, smaller window opens on top. It shows the target and numbers, then you on the left and the opponent on the right, each with time, points, result and the steps they took.</li>
+      <li><strong>Closing:</strong> X, Esc or a click outside closes only the top window. On a phone both are full screen.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+const ME = 'Jenel_29';
+const MATCHES = [
+  { opp: 'Kira_Voss',  me: 5,   op: 3.5, win: true,  date: 'Oct 13, 2026 · 21:40', rounds: 7 },
+  { opp: 'Dmitri_K',   me: 2.5, op: 5,   win: false, date: 'Oct 13, 2026 · 20:12', rounds: 6 },
+  { opp: 'noodle88',   me: 3,   op: 1.5, win: true,  date: 'Oct 12, 2026 · 18:03', rounds: 4, forfeit: true },
+  { opp: 'Alba_Quinn', me: 4,   op: 5,   win: false, date: 'Oct 11, 2026 · 22:47', rounds: 8 },
+  { opp: 'Mr_Tiles',   me: 5,   op: 2,   win: true,  date: 'Oct 10, 2026 · 19:30', rounds: 6 }
+];
+const ROUNDS = [
+  { n: 1, target: 302, tiles: [75, 8, 4, 5, 2, 10], winner: 'me',
+    me: { time: 14.82, pts: 1.00, res: 302, steps: ['75 × 4 = 300', '300 + 2 = 302'] },
+    op: { time: 9.10,  pts: 0.50, res: 305, steps: ['75 × 4 = 300', '300 + 5 = 305'] } },
+  { n: 2, target: 627, tiles: [100, 50, 6, 3, 9, 8], winner: 'me',
+    me: { time: 21.07, pts: 1.00, res: 627, steps: ['100 × 6 = 600', '9 × 3 = 27', '600 + 27 = 627'] },
+    op: { time: null,  pts: 0.00, res: null, steps: [] } },
+  { n: 3, target: 407, tiles: [100, 25, 4, 3, 7, 2], winner: 'op',
+    me: { time: null,  pts: 0.00, res: null, steps: [] },
+    op: { time: 17.55, pts: 0.50, res: 400, steps: ['100 × 3 = 300', '25 × 4 = 100', '300 + 100 = 400'] } },
+  { n: 4, target: 250, tiles: [50, 25, 5, 10, 2, 8], winner: 'draw',
+    me: { time: null, pts: 0.00, res: null, steps: [] },
+    op: { time: null, pts: 0.00, res: null, steps: [] } }
+];
+const BIG = [25, 50, 75, 100];
+const fmtScore = n => String(Number(n.toFixed(2)));
+const status = m => m.forfeit ? '<span class="pill forfeit">Forfeit</span>' : '<span class="pill">Completed</span>';
+const metaLine = m => `<span><span class="d">${m.date}</span><span class="sep">·</span>${m.rounds} rounds</span>`;
+const tilesHTML = (t, cls = '') => `<div class="tiles ${cls}">${t.map(x => `<span class="${BIG.includes(x) ? 'big' : ''}">${x}</span>`).join('')}</div>`;
+
+function vs3(m) {
+  const r = m.win ? 'win' : 'loss';
+  return `<div class="vs3">
+    <div class="side l"><span class="av me">${ME[0]}</span><span class="nm">${ME}</span></div>
+    <div class="res ${r}"><b>${fmtScore(m.me)} – ${fmtScore(m.op)}</b><small>${m.win ? 'Victory' : 'Defeat'}</small></div>
+    <div class="side r"><span class="nm">${m.opp}</span><span class="av op">${m.opp[0]}</span></div>
+  </div>`;
+}
+function row(m, i) {
+  return `<button class="row" type="button" data-match="${i}">
+    <div class="meta">${metaLine(m)}${status(m)}</div>
+    ${vs3(m)}
+  </button>`;
+}
+function nav() {
+  return `<div class="nav">
+    <div class="logo"><span class="bolt"><svg width="16" height="16" viewBox="0 0 24 24" fill="#00363d" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg></span><span class="txt">Countdown<em>Arena</em></span></div>
+    <div class="tabs"><span>Arena</span><span>Training</span><span class="on">History</span></div>
+    <div class="me"><i></i><span class="u">${ME}</span></div>
+  </div>`;
+}
+function list() {
+  return `<div class="scroll">${nav()}<div class="list"><h3>Match History</h3><p class="sub">Your last 10 matches</p>
+    <div class="rows">${MATCHES.map(row).join('')}</div></div></div>`;
+}
+function side(d, won, cls) {
+  return `<div class="rside ${cls}"><span class="wt">${won ? 'Winner' : ''}</span>
+    <span class="tm ${d.time === null ? 'to' : ''}">${d.time === null ? 'Timeout' : d.time.toFixed(2) + 's'}</span>
+    <span class="pt">${d.pts.toFixed(2)} pts</span></div>`;
+}
+function roundRow(r) {
+  return `<button class="rrow" type="button" data-round="${r.n - 1}">
+    ${side(r.me, r.winner === 'me', 'l')}
+    <div class="rmid"><span class="rn">Round ${r.n}</span>
+      <div class="tgt"><span class="cap">Target</span><b>${r.target}</b></div>
+      ${tilesHTML(r.tiles, 'mini')}
+      ${r.winner === 'draw' ? '<span class="draw">Draw</span>' : ''}
+      <span class="more">View steps ›</span></div>
+    ${side(r.op, r.winner === 'op', 'r')}
+  </button>`;
+}
+function matchModal(i) {
+  const m = MATCHES[i];
+  return `<div class="scrim"><div class="sheet" role="dialog" aria-label="Match details">
+    <div class="sheet-head">
+      <div class="bar"><div class="meta">${metaLine(m)}${status(m)}</div>
+        <span class="right"><span class="kbd">Esc</span><button class="x" type="button" data-close aria-label="Close">×</button></span></div>
+      ${vs3(m)}
+    </div>
+    <div class="sheet-body"><p class="hint">Tap a round to see the steps each player took.</p>${ROUNDS.map(roundRow).join('')}</div>
+  </div></div>`;
+}
+function pane(side, r, opp, noSteps) {
+  const d = r[side];
+  const won = r.winner === side;
+  const label = side === 'me' ? 'You' : 'Opponent';
+  const name = side === 'me' ? ME : opp;
+  const time = d.time === null ? '<div class="v to">Timeout</div>' : `<div class="v">${d.time.toFixed(2)}s</div>`;
+  const res = d.res === null ? '<div class="v nil">—</div>' : `<div class="v">${d.res}</div>`;
+  const steps = noSteps ? '<p class="none">Steps not recorded</p>' : d.steps.length
+    ? `<ol class="steps">${d.steps.map((s, i) => `<li><i>${i + 1}</i><code>${s}</code></li>`).join('')}</ol>`
+    : '<p class="none">No answer submitted</p>';
+  return `<div class="pane ${side}">
+    <div class="phead"><div class="who"><span class="cap">${label}</span><b>${name}</b></div>${won ? '<span class="badge">Winner</span>' : ''}</div>
+    <div class="stats">
+      <div class="stat"><span class="cap">Time</span>${time}</div>
+      <div class="stat"><span class="cap">Points</span><div class="v">${d.pts.toFixed(2)}</div></div>
+      <div class="stat"><span class="cap">Result</span>${res}</div>
+    </div>
+    ${steps}
+  </div>`;
+}
+function roundModal(mi, ri) {
+  const m = MATCHES[mi], r = ROUNDS[ri];
+  return `<div class="scrim top"><div class="sheet sm" role="dialog" aria-label="Round ${r.n} steps">
+    <div class="sheet-head">
+      <div class="bar"><span class="cap">Round ${r.n} of ${m.rounds}${r.winner === 'draw' ? ' · Draw' : ''}</span>
+        <span class="right"><span class="kbd">Esc</span><button class="x" type="button" data-close aria-label="Close">×</button></span></div>
+      <div class="rhead"><div class="t"><span class="cap">Target</span><b>${r.target}</b></div>${tilesHTML(r.tiles)}</div>
+    </div>
+    <div class="sheet-body" style="padding:0"><div class="cols">${pane('me', r, m.opp)}${pane('op', r, m.opp)}</div></div>
+  </div></div>`;
+}
+
+let active = null;
+function mount(id, initial) {
+  const f = document.getElementById(id);
+  f.innerHTML = list();
+  f.dataset.m = '0';
+  const openMatch = i => { f.dataset.m = i; f.insertAdjacentHTML('beforeend', matchModal(i)); };
+  const openRound = ri => f.insertAdjacentHTML('beforeend', roundModal(+f.dataset.m, ri));
+  const closeTop = () => { const s = f.querySelectorAll('.scrim'); if (s.length) s[s.length - 1].remove(); };
+  f._closeTop = closeTop;
+  f.addEventListener('pointerdown', () => { active = f; });
+  f.addEventListener('click', e => {
+    const t = e.target;
+    if (t.closest('[data-close]')) return closeTop();
+    if (t.classList.contains('scrim')) return closeTop();
+    const rr = t.closest('[data-round]');
+    if (rr) return openRound(+rr.dataset.round);
+    const mr = t.closest('[data-match]');
+    if (mr && !f.querySelector('.scrim')) openMatch(+mr.dataset.match);
+  });
+  if (initial >= 1) openMatch(0);
+  if (initial >= 2) openRound(2);
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && active) active._closeTop(); });
+mount('f1', 0);
+mount('f2', 2);
+mount('f3', 1);
+
+const old = { winner: 'me', me: { time: 12.4, pts: 1.00, res: 302, steps: [] }, op: { time: 9.1, pts: 0.5, res: 305, steps: [] } };
+document.getElementById('oldPane').innerHTML = `<div class="cols">${pane('me', old, 'Kira_Voss', true)}${pane('op', old, 'Kira_Voss', true)}</div>`;
+</script>

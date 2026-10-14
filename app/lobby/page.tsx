@@ -4,10 +4,12 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import { createClient } from "@/lib/supabase/client";
+import { displayName } from "@/lib/auth/username";
 
 export interface Profile {
   id: string;
   email: string | null;
+  username: string | null;
   wins: number;
   losses: number;
   mmr: number;
@@ -51,7 +53,7 @@ export default function LobbyPage() {
         // 2. Query matching profile row from database
         const { data, error: dbError } = await supabase
           .from("profiles")
-          .select("id, email, wins, losses, mmr")
+          .select("id, email, username, wins, losses, mmr")
           .eq("id", user.id)
           .maybeSingle();
 
@@ -63,6 +65,7 @@ export default function LobbyPage() {
           setProfile({
             id: user.id,
             email: data?.email || user.email || "Operative",
+            username: data?.username ?? null,
             wins: data?.wins ?? 0,
             losses: data?.losses ?? 0,
             mmr: data?.mmr ?? 1000,
@@ -254,19 +257,19 @@ export default function LobbyPage() {
             ) : (
               <>
                 <div
-                  aria-label={`${profile.email}'s Avatar`}
+                  aria-label={`${displayName(profile)}'s Avatar`}
                   className="w-28 h-28 rounded-full border-2 border-primary-container bg-surface-container flex items-center justify-center mb-2 shadow-[0_0_15px_rgba(0,229,255,0.2)] select-none"
                 >
                   <span className="font-headline-lg text-5xl font-bold text-primary-container">
-                    {profile.email?.charAt(0).toUpperCase()}
+                    {displayName(profile).charAt(0).toUpperCase()}
                   </span>
                 </div>
                 <div>
                   <h1
                     className="font-headline-lg text-lg sm:text-headline-lg text-primary font-bold truncate max-w-[240px]"
-                    title={profile.email?.split("@")[0] || ""}
+                    title={displayName(profile)}
                   >
-                    {profile.email?.split("@")[0]}
+                    {displayName(profile)}
                   </h1>
                   <span className="font-label-caps text-label-caps text-on-surface-variant mt-1 inline-block px-3 py-1 bg-surface-container rounded-full">
                     Operative

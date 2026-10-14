@@ -38,6 +38,7 @@ import type { ErrorModalConfig } from '@/components/ErrorModal';
 import WaitingLobby from '@/components/WaitingLobby';
 import type { WaitingPhase } from '@/components/WaitingLobby';
 import ReconnectBanner from '@/components/ReconnectBanner';
+import { displayName } from '@/lib/auth/username';
 import RoundResultModal from '@/components/RoundResultModal';
 import GameOverModal from '@/components/GameOverModal';
 import RematchModal, { RematchState } from '@/components/RematchModal';
@@ -125,6 +126,7 @@ interface BufferedRoundStart {
 
 interface ProfileData {
   email: string | null;
+  username: string | null;
   wins: number;
   losses: number;
   mmr: number;
@@ -162,6 +164,7 @@ function computeRankTier(mmr: number): { tier: string; nextTier: number } {
 
 interface PlayerSidebarProps {
   label: string;
+  username: string | null;
   email: string | null;
   wins: number;
   losses: number;
@@ -172,9 +175,9 @@ interface PlayerSidebarProps {
   isSelf?: boolean;
 }
 
-function PlayerSidebar({ label, email, wins, losses, mmr, totalRaw, status, isSelf }: PlayerSidebarProps) {
-  const displayName = email ? email.split('@')[0] : label;
-  const initials = (email ?? label).slice(0, 2).toUpperCase();
+function PlayerSidebar({ label, username, email, wins, losses, mmr, totalRaw, status, isSelf }: PlayerSidebarProps) {
+  const shownName = displayName({ username, email }, label);
+  const initials = shownName.slice(0, 2).toUpperCase();
   const accentBorder = isSelf ? 'border-[#00E5FF]/40' : 'border-[#2962FF]/40';
   const accentGlow = isSelf
     ? 'shadow-[0_0_25px_rgba(0,229,255,0.18)] hover:shadow-[0_0_35px_rgba(0,229,255,0.28)]'
@@ -226,12 +229,12 @@ function PlayerSidebar({ label, email, wins, losses, mmr, totalRaw, status, isSe
         {/* Username */}
         <h3
           className="font-headline-lg-mobile text-base sm:text-lg font-black text-on-background tracking-tight max-w-[220px] truncate"
-          title={email ?? label}
+          title={shownName}
         >
-          {displayName}
+          {shownName}
         </h3>
         <p className="text-on-surface-variant font-mono text-[11px] truncate max-w-[200px] mt-0.5 opacity-80">
-          {email ?? label}
+          {label}
         </p>
       </div>
 
@@ -377,7 +380,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
 
   // ── Auth & my profile ───────────────────────────────────────────────────
   const [userId, setUserId] = useState<string | null>(null);
-  const [myProfile, setMyProfile] = useState<ProfileData>({ email: null, wins: 0, losses: 0, mmr: 1000 });
+  const [myProfile, setMyProfile] = useState<ProfileData>({ email: null, username: null, wins: 0, losses: 0, mmr: 1000 });
   const myPrevMmrRef = useRef<number>(1000); // snapshot before match_over so we can compute delta
 
   useEffect(() => {
@@ -406,12 +409,12 @@ function MatchBoard({ matchId }: { matchId: string }) {
       // Fetch profile for the HUD
       const { data } = await supabase
         .from('profiles')
-        .select('email, wins, losses, mmr')
+        .select('email, username, wins, losses, mmr')
         .eq('id', user.id)
         .maybeSingle();
 
       if (data) {
-        const profile = { email: data.email ?? user.email ?? null, wins: data.wins ?? 0, losses: data.losses ?? 0, mmr: data.mmr ?? 1000 };
+        const profile = { email: data.email ?? user.email ?? null, username: data.username ?? null, wins: data.wins ?? 0, losses: data.losses ?? 0, mmr: data.mmr ?? 1000 };
         setMyProfile(profile);
         myPrevMmrRef.current = profile.mmr;
       }
@@ -432,18 +435,18 @@ function MatchBoard({ matchId }: { matchId: string }) {
 
   // ── Opponent profile (populated from opponent_joined then Supabase) ──────
   const [opponentId, setOpponentId] = useState<string | null>(null);
-  const [opponentProfile, setOpponentProfile] = useState<ProfileData>({ email: null, wins: 0, losses: 0, mmr: 1000 });
+  const [opponentProfile, setOpponentProfile] = useState<ProfileData>({ email: null, username: null, wins: 0, losses: 0, mmr: 1000 });
 
   useEffect(() => {
     if (!opponentId) return;
     const supabase = createClient();
     supabase
       .from('profiles')
-      .select('email, wins, losses, mmr')
+      .select('email, username, wins, losses, mmr')
       .eq('id', opponentId)
       .maybeSingle()
       .then(({ data }) => {
-        if (data) setOpponentProfile({ email: data.email ?? null, wins: data.wins ?? 0, losses: data.losses ?? 0, mmr: data.mmr ?? 1000 });
+        if (data) setOpponentProfile({ email: data.email ?? null, username: data.username ?? null, wins: data.wins ?? 0, losses: data.losses ?? 0, mmr: data.mmr ?? 1000 });
       });
   }, [opponentId]);
 
@@ -827,7 +830,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
       if (user) {
         const { data } = await supabase
           .from('profiles')
-          .select('email, wins, losses, mmr')
+          .select('email, username, wins, losses, mmr')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -838,6 +841,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
         if (data) {
           const newProfile = {
             email: data.email ?? null,
+            username: data.username ?? null,
             wins: data.wins ?? 0,
             losses: data.losses ?? 0,
             mmr: data.mmr ?? 1000,
@@ -1028,7 +1032,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
           target={target}
           outcome={myRoundResult?.outcome ?? 'draw'}
           player={{
-            name: myProfile.email ?? 'You',
+            name: displayName(myProfile, 'You'),
             result: myRoundResult?.result !== undefined ? myRoundResult.result : (steps[steps.length - 1]?.result ?? null),
             diff: myRoundResult?.diff !== undefined ? myRoundResult.diff : (steps.length ? Math.abs((steps[steps.length - 1]?.result ?? 0) - target) : null),
             timeMs: myRoundResult?.timeMs ?? null,
@@ -1039,7 +1043,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
             scoreBreakdown: myRoundResult?.reason,
           }}
           opponent={{
-            name: opponentProfile.email ?? 'Opponent',
+            name: displayName(opponentProfile, 'Opponent'),
             result: oppRoundResult?.result ?? null,
             diff: oppRoundResult?.diff ?? null,
             timeMs: oppRoundResult?.timeMs ?? null,
@@ -1071,8 +1075,8 @@ function MatchBoard({ matchId }: { matchId: string }) {
       <GameOverModal
         isOpen={phase === 'GAME_OVER' && rematchState === null}
         winner={gameOverWinner}
-        playerName={myProfile.email ? myProfile.email.split('@')[0] : 'You'}
-        opponentName={opponentProfile.email ? opponentProfile.email.split('@')[0] : 'Opponent'}
+        playerName={displayName(myProfile, 'You')}
+        opponentName={displayName(opponentProfile, 'Opponent')}
         playerFinalScore={myFinalScore}
         opponentFinalScore={oppFinalScore}
         roundsHistory={gameOverHistory}
@@ -1088,7 +1092,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
       {/* Rematch Modal */}
       <RematchModal
         state={rematchState}
-        opponentName={opponentProfile.email ? opponentProfile.email.split('@')[0] : 'Opponent'}
+        opponentName={displayName(opponentProfile, 'Opponent')}
         onAccept={() => {
           respondRematch(matchId, true);
           setRematchState('accepted');
@@ -1136,6 +1140,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
         <aside className="hidden lg:flex flex-col gap-3 sticky top-20">
           <PlayerSidebar
             label="You"
+            username={myProfile.username}
             email={myProfile.email}
             wins={myProfile.wins}
             losses={myProfile.losses}
@@ -1327,6 +1332,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
         <aside className="hidden lg:flex flex-col gap-3 sticky top-20">
           <PlayerSidebar
             label="Opponent"
+            username={opponentProfile.username}
             email={opponentProfile.email}
             wins={opponentProfile.wins}
             losses={opponentProfile.losses}
