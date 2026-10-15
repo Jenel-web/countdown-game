@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import { createClient } from "@/lib/supabase/client";
 import { displayName } from "@/lib/auth/username";
+import { fetchRecentMatches, type MatchSummary } from "@/lib/history";
+import { getRank } from "@/lib/ranks";
+import RankProgress from "@/components/lobby/RankProgress";
+import HowRoundWorks from "@/components/lobby/HowRoundWorks";
+import RecentMatches from "@/components/lobby/RecentMatches";
 
 export interface Profile {
   id: string;
@@ -24,6 +29,9 @@ export default function LobbyPage() {
   const [error, setError] = useState<string | null>(null);
   const [matchId, setMatchId] = useState<string | null>(null);
   const [isCreatingMatch, setIsCreatingMatch] = useState<boolean>(false);
+  const [recentMatches, setRecentMatches] = useState<MatchSummary[]>([]);
+  const [matchesLoading, setMatchesLoading] = useState<boolean>(true);
+  const [matchesError, setMatchesError] = useState<string | null>(null);
 
   const challengeLink = matchId
     ? typeof window !== "undefined"
@@ -71,7 +79,19 @@ export default function LobbyPage() {
             mmr: data?.mmr ?? 1000,
           });
         }
+
+        // 3. Last 5 finished matches. A failure here must not hide the profile.
+        try {
+          const recent = await fetchRecentMatches(supabase, user.id, 5);
+          if (isMounted) setRecentMatches(recent);
+        } catch (matchErr) {
+          console.error("Failed to load recent matches:", matchErr);
+          if (isMounted) setMatchesError("Could not load recent matches.");
+        } finally {
+          if (isMounted) setMatchesLoading(false);
+        }
       } catch (err: any) {
+        if (isMounted) setMatchesLoading(false);
         if (isMounted) {
           setError(err.message || "Failed to load user profile.");
         }
@@ -272,7 +292,7 @@ export default function LobbyPage() {
                     {displayName(profile)}
                   </h1>
                   <span className="font-label-caps text-label-caps text-on-surface-variant mt-1 inline-block px-3 py-1 bg-surface-container rounded-full">
-                    Operative
+                    {getRank(profile.mmr).name}
                   </span>
                 </div>
                 <div className="w-full grid grid-cols-3 gap-base mt-4 pt-4 border-t border-outline-variant/15">
@@ -304,6 +324,8 @@ export default function LobbyPage() {
               </>
             )}
           </div>
+
+          {profile && !loading && !error && <RankProgress mmr={profile.mmr} />}
         </section>
 
         {/* Right Column: Config & Actions */}
@@ -424,6 +446,19 @@ export default function LobbyPage() {
               </div>
             </div>
           </div>
+
+          <HowRoundWorks />
+
+          {profile && (
+            <RecentMatches
+              matches={recentMatches}
+              loading={matchesLoading}
+              error={matchesError}
+              userId={profile.id}
+              onCreateChallenge={handleCreateChallenge}
+              isCreatingChallenge={isCreatingMatch}
+            />
+          )}
         </section>
       </main>
     </div>

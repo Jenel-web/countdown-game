@@ -39,6 +39,7 @@ import WaitingLobby from '@/components/WaitingLobby';
 import type { WaitingPhase } from '@/components/WaitingLobby';
 import ReconnectBanner from '@/components/ReconnectBanner';
 import { displayName } from '@/lib/auth/username';
+import { computeRankTier } from '@/lib/ranks';
 import RoundResultModal from '@/components/RoundResultModal';
 import GameOverModal from '@/components/GameOverModal';
 import RematchModal, { RematchState } from '@/components/RematchModal';
@@ -147,16 +148,6 @@ const tileVariants = {
 // --------------------------------------------------------------------------
 // Helpers
 // --------------------------------------------------------------------------
-
-function computeRankTier(mmr: number): { tier: string; nextTier: number } {
-  if (mmr >= 2000) return { tier: 'Grandmaster', nextTier: 2500 };
-  if (mmr >= 1600) return { tier: 'Master', nextTier: 2000 };
-  if (mmr >= 1300) return { tier: 'Diamond', nextTier: 1600 };
-  if (mmr >= 1000) return { tier: 'Platinum', nextTier: 1300 };
-  if (mmr >= 700) return { tier: 'Gold', nextTier: 1000 };
-  if (mmr >= 400) return { tier: 'Silver', nextTier: 700 };
-  return { tier: 'Bronze', nextTier: 400 };
-}
 
 // --------------------------------------------------------------------------
 // PlayerSidebar — Enlarged In-Match Profile HUD (~2/3 screen height)
