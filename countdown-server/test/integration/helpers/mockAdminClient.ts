@@ -27,7 +27,7 @@ export interface FakeMatchRow {
     id: string;
     player1_id: string;
     player2_id: string | null;
-    status: 'waiting' | 'active' | 'completed';
+    status: 'waiting' | 'pending' | 'active' | 'completed';
     winner_id: string | null;
     ended_at?: string | null;
 }
@@ -127,31 +127,69 @@ export function createMockAdminClient() {
             }
 
             if (table === 'matches') {
+                /**
+                 * Minimal stand-in for supabase-js's filter builder: any number of
+                 * chained .eq()/.neq() calls, then either awaited directly (update /
+                 * delete) or finished with .single() (select). Matches the way the
+                 * handlers really chain their queries, so a handler that forgets a
+                 * status guard behaves differently here than one that has it.
+                 */
+                const makeFilter = (run: (rows: FakeMatchRow[]) => { data?: unknown; error: Error | null }) => {
+                    const preds: Array<(r: FakeMatchRow) => boolean> = [];
+                    const builder = {
+                        eq(column: string, value: unknown) {
+                            preds.push((r) => (r as unknown as Record<string, unknown>)[column] === value);
+                            return builder;
+                        },
+                        neq(column: string, value: unknown) {
+                            preds.push((r) => (r as unknown as Record<string, unknown>)[column] !== value);
+                            return builder;
+                        },
+                        async single() {
+                            const found = matches.filter((r) => preds.every((p) => p(r)));
+                            if (found.length !== 1) return { data: null, error: new Error('not found') };
+                            return { data: found[0], error: null };
+                        },
+                        then(onFulfilled: (v: { error: Error | null }) => unknown, onRejected?: (e: unknown) => unknown) {
+                            const found = matches.filter((r) => preds.every((p) => p(r)));
+                            return Promise.resolve(run(found)).then(onFulfilled, onRejected);
+                        },
+                    };
+                    return builder;
+                };
+
                 return {
                     select() {
-                        return {
-                            eq(_column: 'id', value: string) {
-                                return {
-                                    async single() {
-                                        const row = matches.find((m) => m.id === value);
-                                        if (!row) {
-                                            return { data: null, error: new Error('not found') };
-                                        }
-                                        return { data: row, error: null };
-                                    },
-                                };
-                            },
-                        };
+                        return makeFilter(() => ({ error: null }));
                     },
                     update(patch: Partial<FakeMatchRow>) {
+                        return makeFilter((rows) => {
+                            for (const row of rows) Object.assign(row, patch);
+                            return { error: null };
+                        });
+                    },
+                    delete() {
+                        return makeFilter((rows) => {
+                            for (const row of rows) matches.splice(matches.indexOf(row), 1);
+                            return { error: null };
+                        });
+                    },
+                    insert(row: Partial<FakeMatchRow>) {
+                        const inserted: FakeMatchRow = {
+                            id: `rematch-${matches.length + 1}-${Math.random().toString(36).slice(2, 8)}`,
+                            player1_id: row.player1_id!,
+                            player2_id: row.player2_id ?? null,
+                            status: row.status ?? 'pending',
+                            winner_id: null,
+                        };
+                        matches.push(inserted);
                         return {
-                            eq(_column: 'id', value: string) {
-                                const row = matches.find((m) => m.id === value);
-                                if (row) Object.assign(row, patch);
-                                // Real supabase-js update() returns a thenable/promise-like
-                                // builder; our handlers only ever check `.error`, so a
-                                // resolved promise with { error: null } is sufficient here.
-                                return Promise.resolve({ error: row ? null : new Error('not found') });
+                            select() {
+                                return {
+                                    async single() {
+                                        return { data: { id: inserted.id }, error: null };
+                                    },
+                                };
                             },
                         };
                     },

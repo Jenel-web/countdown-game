@@ -33,6 +33,16 @@ import type {
   SocketData,
 } from './types/events';
 
+// Last line of defence. Every socket handler is already wrapped in
+// safeHandler(), so these should never fire; if one does, log it loudly rather
+// than let a single bad event kill every live match.
+process.on('unhandledRejection', (reason) => {
+  console.error('[process] unhandledRejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[process] uncaughtException:', err);
+});
+
 const PORT = process.env.PORT || 4000;
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'http://localhost:3000';
 
@@ -82,7 +92,7 @@ io.on('connection', (socket) => {
 
   registerRoomHandlers(io, socket, roomManager);
   registerRoundHandlers(io, socket, roomManager);
-  registerRematchHandlers(io, socket);
+  registerRematchHandlers(io, socket, roomManager);
 
   // Note: the actual 'disconnect' listener lives inside
   // registerRoomHandlers (roomHandlers.ts), since disconnect handling is

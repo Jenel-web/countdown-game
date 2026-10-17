@@ -110,6 +110,8 @@ export function applyOp(
             return a * b;
         case '÷':
             return b !== 0 && a % b === 0 ? a / b : null;
+        default:
+            return null; // unknown operator: never return undefined
     }
 }
 
@@ -317,6 +319,10 @@ export function scoreRound(
     p1: PlayerSubmission,
     p2: PlayerSubmission
 ): RoundScoreResult {
+    // Defence in depth: a non-finite result (undefined/NaN/Infinity) is treated as a timeout.
+    if (p1.result !== null && !Number.isFinite(p1.result)) p1 = { ...p1, result: null };
+    if (p2.result !== null && !Number.isFinite(p2.result)) p2 = { ...p2, result: null };
+
     // Both players failed to submit — draw, no points, no W/L change.
     if (p1.result === null && p2.result === null) {
         return {
@@ -445,38 +451,52 @@ export function checkMatchOver(p1TotalRaw: number, p2TotalRaw: number): 1 | 2 | 
     return null;
 }
 
+const VALID_OPS: readonly string[] = ['+', '−', '×', '÷'];
+
 /**
  * Validates a submitted series of arithmetic steps against initial tile values.
+ * Never throws: any malformed input yields { valid: false, finalValue: 0 }.
+ * Extra unexpected keys on a step are ignored (only a, op, b, result are read).
  */
 export function validateSubmission(
     initialTiles: number[],
     steps: Step[]
 ): { valid: boolean; finalValue: number } {
-    if (!Array.isArray(steps) || steps.length === 0) {
-        return { valid: false, finalValue: 0 };
-    }
+    const invalid = { valid: false, finalValue: 0 };
+    try {
+        if (!Array.isArray(steps) || steps.length === 0) return invalid;
+        if (!Array.isArray(initialTiles)) return invalid;
+        if (steps.length > initialTiles.length - 1) return invalid;
 
-    const available = [...initialTiles];
+        const available = [...initialTiles];
+        let finalValue = 0;
 
-    for (const step of steps) {
-        const { a, op, b, result } = step;
+        for (const step of steps) {
+            if (step === null || typeof step !== 'object' || Array.isArray(step)) return invalid;
+            const { a, op, b, result } = step as Step;
 
-        const idxA = available.indexOf(a);
-        if (idxA === -1) return { valid: false, finalValue: 0 };
-        available.splice(idxA, 1);
+            if (!Number.isSafeInteger(a) || !Number.isSafeInteger(b) || !Number.isSafeInteger(result)) {
+                return invalid;
+            }
+            if (typeof op !== 'string' || !VALID_OPS.includes(op)) return invalid;
 
-        const idxB = available.indexOf(b);
-        if (idxB === -1) return { valid: false, finalValue: 0 };
-        available.splice(idxB, 1);
+            const idxA = available.indexOf(a);
+            if (idxA === -1) return invalid;
+            available.splice(idxA, 1);
 
-        const calculated = applyOp(a, op as '+' | '−' | '×' | '÷', b);
-        if (calculated === null || calculated !== result) {
-            return { valid: false, finalValue: 0 };
+            const idxB = available.indexOf(b);
+            if (idxB === -1) return invalid;
+            available.splice(idxB, 1);
+
+            const calculated = applyOp(a, op as '+' | '−' | '×' | '÷', b);
+            if (calculated === null || calculated !== result) return invalid;
+
+            available.push(calculated);
+            finalValue = result;
         }
 
-        available.push(calculated);
+        return { valid: true, finalValue };
+    } catch {
+        return invalid;
     }
-
-    const lastStep = steps[steps.length - 1];
-    return { valid: true, finalValue: lastStep.result };
 }
