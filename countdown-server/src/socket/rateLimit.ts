@@ -20,7 +20,7 @@
  * =============================================================================
  */
 
-import type { Server, Socket } from 'socket.io';
+import type { Socket } from 'socket.io';
 
 /** Largest single packet Socket.io will accept. Real payloads are well under 1KB. */
 export const MAX_PAYLOAD_BYTES = 10_000;
@@ -149,20 +149,56 @@ export function createIpRateLimiter(options: {
 /** A player legitimately has 1 socket, briefly 2-3 while a refresh/reconnect overlaps. */
 export const DEFAULT_MAX_SOCKETS_PER_USER = 5;
 
-export function createUserConnectionCap(
-  io: Server<any, any, any, any>,
-  max: number = DEFAULT_MAX_SOCKETS_PER_USER
-): Middleware {
-  return (socket, next) => {
-    let open = 0;
-    for (const other of io.sockets.sockets.values()) {
-      if (other.id !== socket.id && other.data.userId === socket.data.userId) open++;
+/**
+ * A strict per-account cap. Counting `io.sockets.sockets` is NOT strict: a
+ * socket only appears there after the whole handshake finishes, and auth awaits
+ * Supabase, so many concurrent handshakes would each see "under the cap".
+ *
+ * Instead each admitted handshake RESERVES a slot synchronously (check and
+ * increment happen together, with no await in between), and the slot is
+ * released exactly once when the underlying connection closes - which covers a
+ * normal disconnect AND a handshake abandoned before it ever reached
+ * 'connection' (that case never fires the socket's own 'disconnect').
+ */
+export function createUserConnectionCap(max: number = DEFAULT_MAX_SOCKETS_PER_USER) {
+  const held = new Map<string, number>();
+
+  const middleware: Middleware = (socket, next) => {
+    const userId: string = socket.data.userId;
+
+    // The client already went away while auth was in flight: nothing to reserve,
+    // and a 'close' listener added now would never fire.
+    if (socket.conn.readyState !== 'open') {
+      return next(new Error('Connection closed during the handshake.'));
     }
-    if (open >= max) {
-      console.warn(`[rate-limit] user ${socket.data.userId} already has ${open} open connections`);
+
+    const current = held.get(userId) ?? 0;
+    if (current >= max) {
+      console.warn(`[rate-limit] user ${userId} already holds ${current} connections`);
       return next(new Error('Too many open connections for this account.'));
     }
+    held.set(userId, current + 1);
+
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      const left = (held.get(userId) ?? 1) - 1;
+      if (left <= 0) held.delete(userId);
+      else held.set(userId, left);
+    };
+    socket.conn.once('close', release); // transport gone: always fires, even mid-handshake
+    socket.once('disconnect', release); // namespace-level disconnect that leaves the transport open
+
     next();
+  };
+
+  return {
+    middleware,
+    /** Slots currently reserved by `userId` (for tests and diagnostics). */
+    heldBy: (userId: string) => held.get(userId) ?? 0,
+    /** Number of accounts holding at least one slot. Stays bounded: entries are deleted at zero. */
+    size: () => held.size,
   };
 }
 

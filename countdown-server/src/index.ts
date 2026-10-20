@@ -98,7 +98,7 @@ const io = new Server<
 const ipLimiter = createIpRateLimiter({ trustProxy: process.env.TRUST_PROXY === 'true' });
 io.use(ipLimiter.middleware);
 io.use(authMiddleware);
-io.use(createUserConnectionCap(io));
+io.use(createUserConnectionCap().middleware);
 
 const roomManager = new RoomManager();
 

@@ -23,6 +23,8 @@
  * =============================================================================
  */
 
+import crypto from "crypto";
+
 export interface FakeMatchRow {
     id: string;
     player1_id: string;

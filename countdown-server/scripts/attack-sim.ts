@@ -7,7 +7,8 @@
  * observed, and DEFENDED / VULNERABLE.
  *
  * SAFETY
- *   - Refuses any server that is not localhost / 127.0.0.1.
+ *   - Refuses any server that is not localhost / 127.0.0.1 / [::1]. The check lives in
+ *     lib/localTarget.ts and is repeated on every connection and request.
  *   - Use two THROWAWAY test accounts. The scripted match is left unfinished
  *     (nobody forfeits, so no MMR changes), but it does leave one `matches` row
  *     behind with status 'active' (the stale-match sweeper isn't built yet).
@@ -15,8 +16,8 @@
  * USAGE (from countdown-server/, with the game server running on :4000)
  *
  *   1. Get an access token for each test account (they last about an hour):
- *        SUPABASE_URL=... SUPABASE_ANON_KEY=... npx tsx scripts/get-token.ts <usernameA> <passwordA>
- *        SUPABASE_URL=... SUPABASE_ANON_KEY=... npx tsx scripts/get-token.ts <usernameB> <passwordB>
+ *        SUPABASE_URL=... SUPABASE_ANON_KEY=... SIM_PASSWORD=<passwordA> npx tsx scripts/get-token.ts <usernameA>
+ *        SUPABASE_URL=... SUPABASE_ANON_KEY=... SIM_PASSWORD=<passwordB> npx tsx scripts/get-token.ts <usernameB>
  *
  *   2. Run the suite. Either let it create the match (needs SUPABASE_URL and
  *      SUPABASE_ANON_KEY too), or create a challenge in the lobby with account A
@@ -29,11 +30,16 @@
  * =============================================================================
  */
 
-import { io, type Socket } from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
 import { createClient } from '@supabase/supabase-js';
+import { connectLocalSocket, localFetch, parseLocalTarget, toLocalTarget, type LocalTarget } from './lib/localTarget';
+
+// Re-exported for existing callers; the check itself lives in lib/localTarget.ts.
+export { assertLocalhost } from './lib/localTarget';
 
 export interface AttackOptions {
-  url: string;
+  /** Validated again here and at every connection, whatever the caller did. */
+  url: string | LocalTarget;
   tokenA: string;
   tokenB: string;
   matchId: string;
@@ -54,16 +60,9 @@ type RoundStart = { roundNumber: number; tiles: Tile[]; target: number; startTim
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export function assertLocalhost(url: string): void {
-  const host = new URL(url).hostname;
-  if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(host)) {
-    throw new Error(`Refusing to run against "${host}". These scripts only attack a server on your own machine.`);
-  }
-}
-
-function connect(url: string, token: string): Promise<Socket> {
+function connect(target: LocalTarget, token: string): Promise<Socket> {
   return new Promise((resolve, reject) => {
-    const s = io(url, { auth: { token }, transports: ['websocket'], forceNew: true, reconnection: false });
+    const s = connectLocalSocket(target, token);
     s.once('connect', () => resolve(s));
     s.once('connect_error', (e) => reject(new Error(`could not connect: ${e.message}`)));
   });
@@ -85,7 +84,7 @@ function recorder<T = any>(socket: Socket, event: string): T[] {
 }
 
 export async function runAttackSuite(opts: AttackOptions): Promise<Finding[]> {
-  assertLocalhost(opts.url);
+  const target = toLocalTarget(opts.url);
   const log = opts.log ?? console.log;
   const findings: Finding[] = [];
   const record = (f: Finding) => {
@@ -99,14 +98,14 @@ export async function runAttackSuite(opts: AttackOptions): Promise<Finding[]> {
 
   const health = async () => {
     try {
-      return (await fetch(`${opts.url}/health`, { signal: AbortSignal.timeout(3000) })).ok;
+      return (await localFetch(target, '/health')).ok;
     } catch {
       return false;
     }
   };
 
-  let A = await connect(opts.url, opts.tokenA);
-  const B = await connect(opts.url, opts.tokenB);
+  let A = await connect(target, opts.tokenA);
+  const B = await connect(target, opts.tokenB);
 
   // ── 1. Garbage barrage ────────────────────────────────────────────────────
   const garbage: unknown[] = [undefined, null, 'x', 42, [], [null], {}, { matchId: null }, { matchId: {} }];
@@ -126,7 +125,7 @@ export async function runAttackSuite(opts: AttackOptions): Promise<Finding[]> {
   // Always continue on a fresh connection: the barrage spent this socket's per-event budgets
   // (which is itself the rate limiter doing its job), so a real join on it would be dropped.
   A.disconnect();
-  A = await connect(opts.url, opts.tokenA);
+  A = await connect(target, opts.tokenA);
 
   // ── join the match ────────────────────────────────────────────────────────
   const aRoundStarts = recorder<RoundStart>(A, 'round_start');
@@ -284,8 +283,7 @@ async function createMatch(tokenA: string): Promise<string> {
 }
 
 async function main() {
-  const url = process.env.SERVER_URL ?? 'http://localhost:4000';
-  assertLocalhost(url);
+  const target = parseLocalTarget(process.env.SERVER_URL ?? 'http://localhost:4000');
   const tokenA = process.env.TOKEN_A;
   const tokenB = process.env.TOKEN_B;
   if (!tokenA || !tokenB) {
@@ -293,9 +291,9 @@ async function main() {
     process.exit(2);
   }
   const matchId = process.env.MATCH_ID ?? (await createMatch(tokenA));
-  console.log(`Attacking ${url}, match ${matchId}\n(takes about a minute: it plays real rounds)`);
+  console.log(`Attacking ${target.origin}, match ${matchId}\n(takes about a minute: it plays real rounds)`);
 
-  const findings = await runAttackSuite({ url, tokenA, tokenB, matchId });
+  const findings = await runAttackSuite({ url: target, tokenA, tokenB, matchId });
 
   const vulnerable = findings.filter((f) => f.defended === false);
   console.log('\n──────────────── SUMMARY ────────────────');

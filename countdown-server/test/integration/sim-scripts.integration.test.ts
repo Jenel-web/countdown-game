@@ -40,6 +40,22 @@ describe('assertLocalhost', () => {
   });
 });
 
+describe('exported script functions validate their own target (not only the CLI)', () => {
+  const remote = 'http://example.com';
+  const forged = { origin: 'http://evil.com' } as any;
+
+  it.each([
+    ['floodEvents', () => floodEvents(remote, 't', 10)],
+    ['floodConnections', () => floodConnections(remote, 't', 10)],
+    ['floodBig', () => floodBig(remote, 't')],
+    ['runAttackSuite', () => runAttackSuite({ url: remote, tokenA: 'a', tokenB: 'b', matchId: 'm' })],
+    ['floodEvents (forged target object)', () => floodEvents(forged, 't', 10)],
+    ['runAttackSuite (forged target object)', () => runAttackSuite({ url: forged, tokenA: 'a', tokenB: 'b', matchId: 'm' })],
+  ])('%s refuses a non-local address when called directly', async (_name, call) => {
+    await expect(call()).rejects.toThrow(/^Refusing/);
+  });
+});
+
 describe('attack-sim against the hardened server', () => {
   it('reports every exercised attack as DEFENDED', async () => {
     const matchId = randomUUID();

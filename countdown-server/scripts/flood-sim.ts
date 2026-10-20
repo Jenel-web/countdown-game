@@ -6,7 +6,8 @@
  * Compare a run before and after the rate limiter to see what it buys you.
  *
  * SAFETY
- *   - Refuses any server that is not localhost / 127.0.0.1.
+ *   - Refuses any server that is not localhost / 127.0.0.1 / [::1]. The check lives in
+ *     lib/localTarget.ts and is repeated on every connection and request.
  *   - Volumes are capped (see MAX_* below). Every connection that gets past the
  *     IP limiter makes one Supabase auth call, and every join_room that gets
  *     through makes one Supabase read, so keep this to a throwaway account.
@@ -23,29 +24,29 @@
  *           (each accepted one is a Supabase auth call)
  *   big     oversized packets (50 KB and 5 MB)
  *
- * Get a token with:  npx tsx scripts/get-token.ts <username> <password>
+ * Get a token with:  SIM_PASSWORD=<password> npx tsx scripts/get-token.ts <username>
  * =============================================================================
  */
 
-import { io, type Socket } from 'socket.io-client';
-import { assertLocalhost } from './attack-sim';
+import type { Socket } from 'socket.io-client';
+import { connectLocalSocket, localFetch, parseLocalTarget, toLocalTarget, type LocalTarget } from './lib/localTarget';
 
 const MAX_EVENTS = 2000;
 const MAX_CONNS = 200;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function open(url: string, token: string): Promise<{ ok: boolean; message?: string; socket: Socket }> {
-  const socket = io(url, { auth: { token }, transports: ['websocket'], forceNew: true, reconnection: false });
+function open(target: LocalTarget, token: string): Promise<{ ok: boolean; message?: string; socket: Socket }> {
+  const socket = connectLocalSocket(target, token);
   return new Promise((resolve) => {
     socket.once('connect', () => resolve({ ok: true, socket }));
     socket.once('connect_error', (e) => resolve({ ok: false, message: e.message, socket }));
   });
 }
 
-async function healthMs(url: string): Promise<string> {
+async function healthMs(target: LocalTarget): Promise<string> {
   const t = Date.now();
   try {
-    const r = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3000) });
+    const r = await localFetch(target, '/health');
     return r.ok ? `${Date.now() - t}ms` : `HTTP ${r.status}`;
   } catch {
     return 'NO RESPONSE (timed out or refused)';
@@ -57,9 +58,12 @@ export interface FloodReport {
   lines: string[];
 }
 
-export async function floodEvents(url: string, token: string, n: number): Promise<FloodReport> {
+// Every exported function validates its own target (string or parsed): none of
+// them relies on a caller having checked it first.
+export async function floodEvents(url: string | LocalTarget, token: string, n: number): Promise<FloodReport> {
+  const target = toLocalTarget(url);
   n = Math.min(n, MAX_EVENTS);
-  const c = await open(url, token);
+  const c = await open(target, token);
   if (!c.ok) return { mode: 'events', lines: [`could not connect: ${c.message}`] };
   let answered = 0;
   c.socket.on('error', () => answered++);
@@ -75,15 +79,16 @@ export async function floodEvents(url: string, token: string, n: number): Promis
     closedAt !== null
       ? `server DISCONNECTED the flooder after ${closedAt} answered`
       : 'the connection is still open (no cut-off)',
-    `/health during/after: ${await healthMs(url)}`,
+    `/health during/after: ${await healthMs(target)}`,
   ];
   c.socket.disconnect();
   return { mode: 'events', lines };
 }
 
-export async function floodConnections(url: string, token: string, n: number): Promise<FloodReport> {
+export async function floodConnections(url: string | LocalTarget, token: string, n: number): Promise<FloodReport> {
+  const target = toLocalTarget(url);
   n = Math.min(n, MAX_CONNS);
-  const results = await Promise.all(Array.from({ length: n }, () => open(url, token)));
+  const results = await Promise.all(Array.from({ length: n }, () => open(target, token)));
   const accepted = results.filter((r) => r.ok).length;
   const byReason = new Map<string, number>();
   for (const r of results) if (!r.ok) byReason.set(r.message ?? 'unknown', (byReason.get(r.message ?? 'unknown') ?? 0) + 1);
@@ -91,16 +96,17 @@ export async function floodConnections(url: string, token: string, n: number): P
     `${n} connection attempts, one account, one IP`,
     `accepted: ${accepted}   <- each is a Supabase auth call + memory`,
     ...[...byReason.entries()].map(([msg, count]) => `refused ${count}x: "${msg}"`),
-    `/health: ${await healthMs(url)}`,
+    `/health: ${await healthMs(target)}`,
   ];
   results.forEach((r) => r.socket.disconnect());
   return { mode: 'conns', lines };
 }
 
-export async function floodBig(url: string, token: string): Promise<FloodReport> {
+export async function floodBig(url: string | LocalTarget, token: string): Promise<FloodReport> {
+  const target = toLocalTarget(url);
   const lines: string[] = [];
   for (const [label, bytes] of [['50 KB', 50_000], ['5 MB', 5_000_000]] as const) {
-    const c = await open(url, token);
+    const c = await open(target, token);
     if (!c.ok) {
       lines.push(`${label}: could not connect (${c.message}) - IP/account limit already tripped, wait a minute and rerun`);
       continue;
@@ -116,8 +122,7 @@ export async function floodBig(url: string, token: string): Promise<FloodReport>
 }
 
 async function main() {
-  const url = process.env.SERVER_URL ?? 'http://localhost:4000';
-  assertLocalhost(url);
+  const target = parseLocalTarget(process.env.SERVER_URL ?? 'http://localhost:4000');
   const token = process.env.TOKEN_A;
   if (!token) {
     console.error('Set TOKEN_A (see the usage notes at the top of this file).');
@@ -127,10 +132,10 @@ async function main() {
   const n = Number(process.argv[3]);
   const reports: FloodReport[] = [];
 
-  console.log(`Flooding ${url} (/health right now: ${await healthMs(url)})\n`);
-  if (mode === 'events' || mode === 'all') reports.push(await floodEvents(url, token, Number.isFinite(n) && n > 0 ? n : 500));
-  if (mode === 'conns' || mode === 'all') reports.push(await floodConnections(url, token, Number.isFinite(n) && n > 0 ? n : 40));
-  if (mode === 'big' || mode === 'all') reports.push(await floodBig(url, token));
+  console.log(`Flooding ${target.origin} (/health right now: ${await healthMs(target)})\n`);
+  if (mode === 'events' || mode === 'all') reports.push(await floodEvents(target, token, Number.isFinite(n) && n > 0 ? n : 500));
+  if (mode === 'conns' || mode === 'all') reports.push(await floodConnections(target, token, Number.isFinite(n) && n > 0 ? n : 40));
+  if (mode === 'big' || mode === 'all') reports.push(await floodBig(target, token));
   if (reports.length === 0) {
     console.error('mode must be one of: all, events, conns, big');
     process.exit(2);

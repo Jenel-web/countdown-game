@@ -45,6 +45,8 @@ export interface TestServerHandle {
     io: Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
     roomManager: RoomManager;
     url: string;
+    /** Per-account connection slots currently reserved (see createUserConnectionCap). */
+    heldConnections: (userId: string) => number;
     close: () => Promise<void>;
 }
 
@@ -76,7 +78,8 @@ export async function startTestServer(options: TestServerOptions = {}): Promise<
     const ipLimiter = createIpRateLimiter({ limit: options.ipLimit ?? { capacity: 1_000_000, refillPerSec: 1_000_000 } });
     io.use(ipLimiter.middleware);
     io.use(authMiddleware);
-    io.use(createUserConnectionCap(io, options.maxSocketsPerUser));
+    const userCap = createUserConnectionCap(options.maxSocketsPerUser);
+    io.use(userCap.middleware);
 
     const roomManager = new RoomManager();
 
@@ -102,6 +105,7 @@ export async function startTestServer(options: TestServerOptions = {}): Promise<
         io,
         roomManager,
         url,
+        heldConnections: userCap.heldBy,
         close: () =>
             new Promise<void>((resolve, reject) => {
                 ipLimiter.stop();
