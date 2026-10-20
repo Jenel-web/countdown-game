@@ -19,7 +19,9 @@
  */
 
 import type { Server, Socket } from 'socket.io';
+import type { RoomManager } from '../../rooms/RoomManager';
 import { adminClient } from '../../supabase/adminClient';
+import { parseMatchPayload, parseRematchResponse, safeHandler } from '../validation';
 import type {
   ClientToServerEvents,
   ServerToClientEvents,
@@ -40,14 +42,23 @@ const pendingOffers = new Map<string, PendingOffer>();
 
 export function registerRematchHandlers(
   io: AppServer,
-  socket: AppSocket
+  socket: AppSocket,
+  roomManager: RoomManager
 ): void {
 
-  socket.on('request_rematch', ({ matchId }) => {
+  socket.on('request_rematch', safeHandler('request_rematch', (payload) => {
     const userId = socket.data.userId;
+
+    const matchId = parseMatchPayload(payload);
+    if (!matchId) return;
 
     // Only a socket that actually played in this match may start a rematch.
     if (socket.data.matchId !== matchId) return;
+
+    // A rematch only makes sense once the match is over. While the room still
+    // exists the match is live (the room is removed the moment it ends), so a
+    // request now would just offer the opponent a second match mid-game.
+    if (roomManager.getRoom(matchId)) return;
 
     // Ignore duplicate requests for the same finished match.
     if (pendingOffers.has(matchId)) return;
@@ -74,9 +85,13 @@ export function registerRematchHandlers(
     setTimeout(() => {
       pendingOffers.delete(matchId);
     }, 60_000);
-  });
+  }));
 
-  socket.on('rematch_response', async ({ matchId, accepted }) => {
+  socket.on('rematch_response', safeHandler('rematch_response', async (payload) => {
+    const parsed = parseRematchResponse(payload);
+    if (!parsed) return;
+    const { matchId, accepted } = parsed;
+
     // Only a player from this match may answer.
     if (socket.data.matchId !== matchId) return;
 
@@ -123,9 +138,9 @@ export function registerRematchHandlers(
 
     // Tell both players to navigate to the new match.
     io.to(matchId).emit('rematch_accepted', { newMatchId: data.id });
-  });
+  }));
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', safeHandler('disconnect', () => {
     for (const [matchId, offer] of pendingOffers.entries()) {
       if (offer.requesterSocketId === socket.id) {
         pendingOffers.delete(matchId);
@@ -137,5 +152,5 @@ export function registerRematchHandlers(
         pendingOffers.delete(matchId);
       }
     }
-  });
+  }));
 }

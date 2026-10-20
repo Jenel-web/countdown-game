@@ -30,6 +30,15 @@ export interface RoundSubmission {
   steps?: SubmissionStep[];
 }
 
+/**
+ * Where the current round is in its life:
+ *   idle        - no round has started yet (lobby)
+ *   active      - round is open, submissions are accepted
+ *   evaluating  - round is being / has been scored; submissions are refused
+ *                 until resetRound() opens the next one
+ */
+export type RoundPhase = 'idle' | 'active' | 'evaluating';
+
 export interface RoomState {
   matchId: string;
 
@@ -49,6 +58,7 @@ export interface RoomState {
   currentSolvable: boolean;
   currentBestSolution: BestSolution | null;
   startTimestamp: number | null;
+  roundPhase: RoundPhase;
 
   roundTimer: NodeJS.Timeout | null;
 
@@ -85,6 +95,7 @@ export class RoomManager {
       currentSolvable: false,
       currentBestSolution: null,
       startTimestamp: null,
+      roundPhase: 'idle',
       roundTimer: null,
       disconnectTimers: {},
       submissions: {},
@@ -158,14 +169,35 @@ export class RoomManager {
     return true;
   }
 
+  /**
+   * Records a player's submission for the open round.
+   * Returns false (and records nothing) if the round is not active or this
+   * slot has already submitted - the first submission is final.
+   */
   recordSubmission(
     matchId: string,
     slot: 'player1' | 'player2',
     submission: RoundSubmission
-  ): void {
+  ): boolean {
     const room = this.rooms.get(matchId);
-    if (!room) return;
+    if (!room) return false;
+    if (room.roundPhase !== 'active') return false;
+    if (room.submissions[slot]) return false;
     room.submissions[slot] = submission;
+    return true;
+  }
+
+  /**
+   * Claims the right to score the current round. Returns true exactly once per
+   * round (the first caller); every later caller gets false until resetRound()
+   * opens the next round. Must be called BEFORE any await in evaluateRound so
+   * a timer expiry and a "both submitted" can never both score the same round.
+   */
+  beginEvaluation(matchId: string): boolean {
+    const room = this.rooms.get(matchId);
+    if (!room || room.roundPhase !== 'active') return false;
+    room.roundPhase = 'evaluating';
+    return true;
   }
 
   bothSubmitted(matchId: string): boolean {
@@ -191,6 +223,7 @@ export class RoomManager {
     room.currentSolvable = solvable;
     room.currentBestSolution = bestSolution;
     room.startTimestamp = startTimestamp;
+    room.roundPhase = 'active';
     room.submissions = {};
 
     if (room.roundTimer) {

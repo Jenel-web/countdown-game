@@ -235,6 +235,33 @@ describe('validateSubmission', () => {
         validateSubmission(original, [{ a: 2, op: '+', b: 3, result: 5 }]);
         expect(original).toEqual(originalCopy);
     });
+
+    it('applyOp returns null (not undefined) for an unknown operator', () => {
+        expect(applyOp(2, '?' as never, 3)).toBeNull();
+    });
+
+    it('rejects an unknown op with a missing result (forged step)', () => {
+        const forged = [{ a: 2, op: '?', b: 3 }] as unknown as Step[];
+        expect(validateSubmission([2, 3, 4, 5, 6, 7], forged)).toEqual({ valid: false, finalValue: null });
+    });
+
+    it('rejects ASCII operators, non-integer values, and null step entries without throwing', () => {
+        const tiles = [2, 3, 4, 5, 6, 7];
+        const cases: unknown[][] = [
+            [{ a: 2, op: '-', b: 3, result: -1 }],
+            [{ a: 2, op: '+', b: 3, result: 5.5 }],
+            [{ a: 2, op: '+', b: 3, result: NaN }],
+            [null],
+        ];
+        for (const steps of cases) {
+            expect(validateSubmission(tiles, steps as Step[])).toEqual({ valid: false, finalValue: null });
+        }
+    });
+
+    it('rejects more than tiles-1 steps', () => {
+        const s = { a: 2, op: '+', b: 2, result: 4 };
+        expect(validateSubmission([2, 2, 2, 2, 2, 2], Array(6).fill(s))).toEqual({ valid: false, finalValue: null });
+    });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

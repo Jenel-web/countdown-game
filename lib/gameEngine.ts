@@ -146,6 +146,8 @@ export function applyOp(a: number, op: '+' | '−' | '×' | '÷', b: number): nu
       return a * b;
     case '÷':
       return b !== 0 && a % b === 0 ? a / b : null;
+    default:
+      return null; // unknown operator: never return undefined
   }
 }
 
@@ -176,37 +178,44 @@ export function validateSubmission(
   originalTileValues: number[],
   steps: Step[]
 ): { valid: boolean; finalValue: number | null } {
-  const pool = [...originalTileValues];
+  const invalid = { valid: false, finalValue: null };
+  try {
+    if (!Array.isArray(steps) || steps.length === 0) return invalid;
+    // (0 steps is not "valid" here; callers handle a raw-tile answer themselves.)
+    if (!Array.isArray(originalTileValues)) return invalid;
+    if (steps.length > originalTileValues.length - 1) return invalid;
 
-  function take(value: number): boolean {
-    const idx = pool.indexOf(value);
-    if (idx === -1) return false;
-    pool.splice(idx, 1);
-    return true;
-  }
+    const pool = [...originalTileValues];
+    const take = (value: number): boolean => {
+      const idx = pool.indexOf(value);
+      if (idx === -1) return false;
+      pool.splice(idx, 1);
+      return true;
+    };
 
-  if (steps.length === 0) {
-    // No moves submitted at all isn't necessarily "invalid" (a player
-    // might legitimately submit a raw starting tile as their answer if it
-    // happens to equal the target) — but that case has no Steps to
-    // validate, so the caller should handle "0 steps" as its own case
-    // before calling this function if that's a scenario you want to allow.
-    return { valid: false, finalValue: null };
-  }
+    let finalValue = 0;
+    for (const step of steps) {
+      if (step === null || typeof step !== 'object' || Array.isArray(step)) return invalid;
+      const { a, op, b, result } = step as Step;
+      if (!Number.isSafeInteger(a) || !Number.isSafeInteger(b) || !Number.isSafeInteger(result)) {
+        return invalid;
+      }
+      if (op !== '+' && op !== '−' && op !== '×' && op !== '÷') return invalid;
 
-  for (const step of steps) {
-    if (!take(step.a)) return { valid: false, finalValue: null };
-    if (!take(step.b)) return { valid: false, finalValue: null };
+      if (!take(a)) return invalid;
+      if (!take(b)) return invalid;
 
-    const expected = applyOp(step.a, step.op, step.b);
-    if (expected === null || expected !== step.result) {
-      return { valid: false, finalValue: null };
+      const expected = applyOp(a, op, b);
+      if (expected === null || expected !== result) return invalid;
+
+      pool.push(result);
+      finalValue = result;
     }
 
-    pool.push(step.result);
+    return { valid: true, finalValue };
+  } catch {
+    return invalid;
   }
-
-  return { valid: true, finalValue: steps[steps.length - 1].result };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -20,7 +20,7 @@
  */
 
 import type { Server, Socket } from 'socket.io';
-import { RoomManager } from '../../rooms/RoomManager';
+import { RoomManager, type SubmissionStep } from '../../rooms/RoomManager';
 import { adminClient } from '../../supabase/adminClient';
 import {
   generateTilePool,
@@ -30,6 +30,12 @@ import {
   scoreRound,
   checkMatchOver,
 } from '../../game/gameEngine';
+import {
+  isSubmissionTooEarly,
+  parsePlayerStatus,
+  parseSubmitPayload,
+  safeHandler,
+} from '../validation';
 import type {
   ClientToServerEvents,
   ServerToClientEvents,
@@ -114,6 +120,12 @@ export async function evaluateRound(
 ): Promise<void> {
   const room = roomManager.getRoom(matchId);
   if (!room) return;
+
+  // Claim this round's scoring BEFORE any await. The 30s timer, a "both
+  // submitted" and any repeated submit_answer can all arrive here for the same
+  // round; only the first caller may score it, otherwise points are added
+  // twice, a second rounds row is written and a second next-round is queued.
+  if (!roomManager.beginEvaluation(matchId)) return;
 
   const p1sub = room.submissions.player1 ?? { result: null, timeMs: null };
   const p2sub = room.submissions.player2 ?? { result: null, timeMs: null };
@@ -233,71 +245,101 @@ export function registerRoundHandlers(
   socket: AppSocket,
   roomManager: RoomManager
 ): void {
-  socket.on('player_status', ({ status }) => {
-    const matchId = socket.data.matchId;
-    if (!matchId) return;
+  socket.on(
+    'player_status',
+    safeHandler('player_status', (payload) => {
+      const matchId = socket.data.matchId;
+      if (!matchId) return;
 
-    // Broadcast to everyone else in the room (not back to the sender) —
-    // this is purely a cosmetic "opponent is thinking / submitted"
-    // indicator, so the sender doesn't need to see their own echo.
-    socket.to(matchId).emit('player_status', { userId: socket.data.userId, status });
-  });
+      const status = parsePlayerStatus(payload);
+      if (!status) return;
 
-  socket.on('submit_answer', async ({ steps, resultValue }) => {
-    const matchId = socket.data.matchId;
-    const userId = socket.data.userId;
-    if (!matchId) {
-      socket.emit('error', { code: 'not_in_room', message: 'You are not currently in a match room.' });
-      return;
-    }
+      // Broadcast to everyone else in the room (not back to the sender) —
+      // this is purely a cosmetic "opponent is thinking / submitted"
+      // indicator, so the sender doesn't need to see their own echo.
+      socket.to(matchId).emit('player_status', { userId: socket.data.userId, status });
+    })
+  );
 
-    const room = roomManager.getRoom(matchId);
-    if (!room || room.startTimestamp === null) {
-      socket.emit('error', { code: 'no_active_round', message: 'There is no active round to submit an answer for.' });
-      return;
-    }
+  socket.on(
+    'submit_answer',
+    safeHandler('submit_answer', async (payload) => {
+      const matchId = socket.data.matchId;
+      const userId = socket.data.userId;
+      if (!matchId) {
+        socket.emit('error', { code: 'not_in_room', message: 'You are not currently in a match room.' });
+        return;
+      }
 
-    const slot = roomManager.getSlotByUserId(matchId, userId);
-    if (!slot) {
-      // This user isn't recognized as either player in this room — reject
-      // outright rather than silently recording a phantom submission.
-      socket.emit('error', { code: 'not_a_player', message: 'You are not a player in this match.' });
-      return;
-    }
+      // Shape check only: the contents of `steps` are validated by the engine.
+      const steps = parseSubmitPayload(payload);
+      if (!steps) {
+        console.warn(`[match ${matchId}] dropped malformed submit_answer from ${userId}`);
+        return;
+      }
 
-    const timeMs = Date.now() - room.startTimestamp;
+      const room = roomManager.getRoom(matchId);
+      // roundPhase !== 'active' covers both "no round yet" and "this round is
+      // already being / has been scored" (the window between rounds).
+      if (!room || room.roundPhase !== 'active' || room.startTimestamp === null) {
+        socket.emit('error', { code: 'no_active_round', message: 'There is no active round to submit an answer for.' });
+        return;
+      }
 
-    // *** THE CORE "NEVER TRUST THE CLIENT" STEP ***
-    // We deliberately IGNORE the client's claimed `resultValue` here and
-    // independently recompute it ourselves by replaying `steps` against
-    // the round's real original tiles. If the replay says the moves were
-    // illegal, or the claimed result doesn't match what those moves
-    // actually produce, the player is scored as if they submitted nothing
-    // valid — exactly like a hostile/forged submission would be handled.
-    const { valid, finalValue } = validateSubmission(
-      room.currentTiles.map((t) => t.value),
-      steps
-    );
+      const slot = roomManager.getSlotByUserId(matchId, userId);
+      if (!slot) {
+        // This user isn't recognized as either player in this room — reject
+        // outright rather than silently recording a phantom submission.
+        socket.emit('error', { code: 'not_a_player', message: 'You are not a player in this match.' });
+        return;
+      }
 
-    const submissionResult = valid ? finalValue : null;
+      const now = Date.now();
+      if (isSubmissionTooEarly(now, room.startTimestamp)) {
+        // Tiles are visible during the prep countdown; answers are not
+        // accepted until gameplay starts (minus a small clock-skew allowance).
+        socket.emit('error', { code: 'no_active_round', message: 'The round has not started yet.' });
+        return;
+      }
 
-    roomManager.recordSubmission(matchId, slot, {
-      result: submissionResult,
-      timeMs,
-      // Only keep steps that passed server-side validation
-      steps: valid ? steps : [],
-    });
+      // The first submission is final. A repeated click, or a client replaying
+      // the event, must not overwrite it or re-trigger scoring.
+      if (room.submissions[slot]) return;
 
-    // Let the opponent know a submission has landed (cosmetic only).
-    socket.to(matchId).emit('player_status', { userId, status: 'submitted' });
+      // Never negative, so the allowed early window can't win speed tiebreaks.
+      const timeMs = Math.max(0, now - room.startTimestamp);
 
-    if (roomManager.bothSubmitted(matchId)) {
-      // Both players are in — no reason to wait out the rest of the
-      // 30-second timer. Cancel it and evaluate immediately.
-      const currentRoom = roomManager.getRoom(matchId);
-      if (currentRoom?.roundTimer) clearTimeout(currentRoom.roundTimer);
+      // *** THE CORE "NEVER TRUST THE CLIENT" STEP ***
+      // We deliberately IGNORE the client's claimed `resultValue` here and
+      // independently recompute it ourselves by replaying `steps` against
+      // the round's real original tiles. If the replay says the moves were
+      // illegal, or the claimed result doesn't match what those moves
+      // actually produce, the player is scored as if they submitted nothing
+      // valid — exactly like a hostile/forged submission would be handled.
+      const { valid, finalValue } = validateSubmission(
+        room.currentTiles.map((t) => t.value),
+        steps as Parameters<typeof validateSubmission>[1]
+      );
 
-      await evaluateRound(io, roomManager, matchId);
-    }
-  });
+      const recorded = roomManager.recordSubmission(matchId, slot, {
+        result: valid ? finalValue : null,
+        timeMs,
+        // Only keep steps that passed server-side validation
+        steps: valid ? (steps as SubmissionStep[]) : [],
+      });
+      if (!recorded) return;
+
+      // Let the opponent know a submission has landed (cosmetic only).
+      socket.to(matchId).emit('player_status', { userId, status: 'submitted' });
+
+      if (roomManager.bothSubmitted(matchId)) {
+        // Both players are in — no reason to wait out the rest of the
+        // 30-second timer. Cancel it and evaluate immediately.
+        const currentRoom = roomManager.getRoom(matchId);
+        if (currentRoom?.roundTimer) clearTimeout(currentRoom.roundTimer);
+
+        await evaluateRound(io, roomManager, matchId);
+      }
+    })
+  );
 }

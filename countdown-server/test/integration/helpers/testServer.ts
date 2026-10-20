@@ -24,6 +24,7 @@ import { Server } from 'socket.io';
 import { authMiddleware } from '../../../src/socket/authMiddleware';
 import { registerRoomHandlers } from '../../../src/socket/handlers/roomHandlers';
 import { registerRoundHandlers } from '../../../src/socket/handlers/roundHandlers';
+import { registerRematchHandlers } from '../../../src/socket/handlers/rematchHandlers';
 import { RoomManager } from '../../../src/rooms/RoomManager';
 import type {
     ClientToServerEvents,
@@ -53,6 +54,7 @@ export async function startTestServer(): Promise<TestServerHandle> {
     io.on('connection', (socket) => {
         registerRoomHandlers(io, socket, roomManager);
         registerRoundHandlers(io, socket, roomManager);
+        registerRematchHandlers(io, socket, roomManager);
     });
 
     // Port 0 tells Node "pick any free port for me" — this is what lets many

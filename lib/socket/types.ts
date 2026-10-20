@@ -247,6 +247,8 @@ export interface ClientToServerEvents {
   /**
    * Fired when the room creator cancels while waiting for an opponent.
    * Server cleans up the room and deletes the pending match row.
+   * Only honoured before the first round starts. Once a match is under way
+   * the server ignores it - leaving a live match is a forfeit (disconnect).
    */
   cancel_room: (payload: { matchId: string }) => void;
 
@@ -276,6 +278,7 @@ export interface ClientToServerEvents {
   /**
    * Fired when the local player wants to invite their opponent to a rematch.
    * Only valid after match_over has been received.
+   * The server ignores it while the match is still live.
    */
   request_rematch: (payload: { matchId: string }) => void;
 

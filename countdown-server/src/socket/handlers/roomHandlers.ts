@@ -14,6 +14,7 @@ import type { Server, Socket } from 'socket.io';
 import { RoomManager } from '../../rooms/RoomManager';
 import { adminClient } from '../../supabase/adminClient';
 import { startNextRound } from './roundHandlers';
+import { parseMatchPayload, safeHandler } from '../validation';
 import type {
   ClientToServerEvents,
   ServerToClientEvents,
@@ -93,8 +94,15 @@ export function registerRoomHandlers(
   socket: AppSocket,
   roomManager: RoomManager
 ): void {
-  socket.on('join_room', async ({ matchId }) => {
+  socket.on('join_room', safeHandler('join_room', async (payload) => {
     const userId = socket.data.userId; // set by authMiddleware — trusted, never from payload
+
+    const matchId = parseMatchPayload(payload);
+    if (!matchId) {
+      // Malformed payload or an id that can't be one of ours: same answer as "no such match".
+      socket.emit('error', { code: 'not_found', message: 'That match does not exist.' });
+      return;
+    }
 
     // Step 1: look up the durable match row. This is the ONLY source of
     // truth for "does this match exist, and who is player1?" — the
@@ -272,25 +280,54 @@ export function registerRoomHandlers(
     } else {
       socket.emit('waiting_for_opponent');
     }
-  });
+  }));
 
-  socket.on('cancel_room', async ({ matchId }) => {
+  socket.on('cancel_room', safeHandler('cancel_room', async (payload) => {
+    const matchId = parseMatchPayload(payload);
+    if (!matchId) return;
+
     const room = roomManager.getRoom(matchId);
     const userId = socket.data.userId;
 
-    if (!room) {
+    // Only forget the room if it is the one this socket is actually in.
+    // Otherwise a player in match A could emit cancel_room for some other id
+    // and make the server lose track of A (no forfeit on disconnect).
+    const leaveIfCurrent = () => {
+      if (socket.data.matchId !== matchId) return;
       socket.leave(matchId);
       socket.data.matchId = undefined;
-      await adminClient.from('matches').delete().eq('id', matchId).eq('player1_id', userId).eq('status', 'pending');
-      await adminClient.from('matches').update({ player2_id: null, status: 'pending' }).eq('id', matchId).eq('player2_id', userId);
+    };
+
+    if (!room) {
+      leaveIfCurrent();
+      // No live room: the only thing a cancel may still do is remove the
+      // caller's OWN not-yet-started (pending) match. It must never touch an
+      // active or completed match - that would let a loser rewrite history.
+      const { error } = await adminClient
+        .from('matches')
+        .delete()
+        .eq('id', matchId)
+        .eq('player1_id', userId)
+        .eq('status', 'pending');
+      if (error) {
+        console.error(`[match ${matchId}] cancel_room DB delete failed:`, error);
+      }
+      return;
+    }
+
+    // A match that is under way cannot be cancelled. Leaving it is a forfeit:
+    // closing the socket starts the reconnect grace timer and then finish_match
+    // records the loss. Honouring cancel_room here would erase the match and
+    // let the losing player dodge the result.
+    if (room.currentRound > 0) {
+      console.warn(`[match ${matchId}] ignored cancel_room from ${userId}: match already in progress`);
       return;
     }
 
     if (room.player1Id === userId) {
-      // Host cancelled the match
+      // Host cancelled the match before it started
       roomManager.removeRoom(matchId);
-      socket.leave(matchId);
-      socket.data.matchId = undefined;
+      leaveIfCurrent();
       io.to(matchId).emit('error', {
         code: 'not_found',
         message: 'The host has cancelled the match.',
@@ -298,25 +335,27 @@ export function registerRoomHandlers(
       const { error } = await adminClient
         .from('matches')
         .delete()
-        .eq('id', matchId);
+        .eq('id', matchId)
+        .neq('status', 'completed');
       if (error) {
         console.error(`[match ${matchId}] cancel_room DB delete failed:`, error);
       }
     } else if (room.player2Id === userId) {
       // Player 2 decided not to play and backed out of the lobby
       roomManager.clearPlayer2(matchId);
-      socket.leave(matchId);
-      socket.data.matchId = undefined;
+      leaveIfCurrent();
       await adminClient
         .from('matches')
         .update({ player2_id: null, status: 'pending' })
-        .eq('id', matchId);
+        .eq('id', matchId)
+        .eq('player2_id', userId)
+        .neq('status', 'completed');
       // Notify player 1 to revert to waiting state
       io.to(matchId).emit('waiting_for_opponent');
     }
-  });
+  }));
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', safeHandler('disconnect', () => {
     const matchId = socket.data.matchId;
     if (!matchId) return; // this socket never joined a room — nothing to clean up
 
@@ -361,9 +400,11 @@ export function registerRoomHandlers(
     );
 
     const timer = setTimeout(() => {
-      void forfeitMatch(io, roomManager, matchId, disconnectedSlot);
+      forfeitMatch(io, roomManager, matchId, disconnectedSlot).catch((err) => {
+        console.error(`[match ${matchId}] forfeitMatch failed:`, err);
+      });
     }, RECONNECT_GRACE_MS);
 
     roomManager.setDisconnectTimer(matchId, disconnectedSlot, timer);
-  });
+  }));
 }
