@@ -49,6 +49,7 @@ import type {
   PlayerSlot,
   ServerErrorCode,
   BestSolutionPayload,
+  PlayerRoundResult,
 } from '@/lib/socket/types';
 import type { RoundHistoryItem, MMRStats } from '@/components/GameOverModal';
 
@@ -83,26 +84,8 @@ interface RoundResultPayload {
   roundNumber: number;
   solvable: boolean;
   bestSolution?: BestSolutionPayload;
-  player1: {
-    points: number;
-    pointsRaw: number;
-    outcome: 'win' | 'loss' | 'draw';
-    result?: number | null;
-    timeMs?: number | null;
-    diff?: number | null;
-    reason?: string;
-    steps?: Step[];
-  };
-  player2: {
-    points: number;
-    pointsRaw: number;
-    outcome: 'win' | 'loss' | 'draw';
-    result?: number | null;
-    timeMs?: number | null;
-    diff?: number | null;
-    reason?: string;
-    steps?: Step[];
-  };
+  player1: PlayerRoundResult;
+  player2: PlayerRoundResult;
   player1TotalRaw: number;
   player2TotalRaw: number;
 }
