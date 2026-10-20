@@ -22,6 +22,12 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 
 import { authMiddleware } from './socket/authMiddleware';
+import {
+  MAX_PAYLOAD_BYTES,
+  createIpRateLimiter,
+  createPacketLimiter,
+  createUserConnectionCap,
+} from './socket/rateLimit';
 import { registerRoomHandlers } from './socket/handlers/roomHandlers';
 import { registerRoundHandlers } from './socket/handlers/roundHandlers';
 import { registerRematchHandlers } from './socket/handlers/rematchHandlers';
@@ -68,6 +74,8 @@ const io = new Server<
   InterServerEvents,
   SocketData
 >(httpServer, {
+  // Real payloads are tiny; anything bigger is junk and closes the connection.
+  maxHttpBufferSize: MAX_PAYLOAD_BYTES,
   cors: {
     // NOTE: Socket.io's CORS configuration is separate from Express's own
     // CORS setup (we're not even using the `cors` package's middleware
@@ -83,12 +91,22 @@ const io = new Server<
 // This is the Socket.io equivalent of your Next.js middleware.ts — it
 // runs for every connection attempt, before any of our own event
 // listeners are attached, and can reject the connection outright.
+// Order matters: the IP limiter runs BEFORE auth so a flood of connection
+// attempts is turned away without ever costing a Supabase auth call.
+// Set TRUST_PROXY=true only when deployed behind exactly one reverse proxy
+// (Render/Railway/Fly), otherwise every player shares the proxy's address.
+const ipLimiter = createIpRateLimiter({ trustProxy: process.env.TRUST_PROXY === 'true' });
+io.use(ipLimiter.middleware);
 io.use(authMiddleware);
+io.use(createUserConnectionCap(io));
 
 const roomManager = new RoomManager();
 
 io.on('connection', (socket) => {
   console.log(`[connect] socket ${socket.id} authenticated as user ${socket.data.userId}`);
+
+  // Per-socket flood protection; runs before any of the handlers below.
+  socket.use(createPacketLimiter(socket));
 
   registerRoomHandlers(io, socket, roomManager);
   registerRoundHandlers(io, socket, roomManager);

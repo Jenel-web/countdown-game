@@ -95,6 +95,16 @@ export interface PlayerRoundResult {
    */
   pointsRaw: number;
   outcome: 'win' | 'loss' | 'draw';
+  /** Final calculated value submitted, or null if timed out / the submission was invalid. */
+  result?: number | null;
+  /** Time in ms taken from round start to submission, or null if timed out. */
+  timeMs?: number | null;
+  /** Absolute difference to target, or null if timed out. */
+  diff?: number | null;
+  /** Detailed scoring explanation based on gameEngine rules. */
+  reason?: string;
+  /** The server-validated steps this player took (empty if none / invalid). */
+  steps?: { a: number; op: string; b: number; result: number }[];
 }
 
 /** Best (fewest-step, closest) solution for a round. Sent only after the round ends. */
@@ -154,6 +164,12 @@ export interface ServerToClientEvents {
     startTimestamp: number;
     /** Always 30_000 (30 seconds) in the current server implementation. */
     durationMs: number;
+    /**
+     * Running totals. Present only when the server RE-SENDS the current round
+     * to a player who reconnected mid-match, so the client can restore scores.
+     */
+    player1TotalRaw?: number;
+    player2TotalRaw?: number;
   }) => void;
 
   /**

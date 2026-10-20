@@ -188,9 +188,9 @@ describe('malformed payloads never crash or stall the server', () => {
         expect(rr.player1.result).toBe(add.resultValue);
     });
 
-    it('an oversized steps array is dropped, not processed', async () => {
+    it('a steps array over the 20-entry cap (but under the packet size limit) is dropped, not processed', async () => {
         const { c1, matchId } = await startMatch('big-1', 'big-2');
-        const steps = Array.from({ length: 5000 }, () => ({ a: 1, op: '+' as const, b: 1, result: 2 }));
+        const steps = Array.from({ length: 25 }, () => ({ a: 1, op: '+' as const, b: 1, result: 2 }));
         c1.emit('submit_answer', { steps, resultValue: 2 });
         await sleep(150);
         expect(server.roomManager.getRoom(matchId)!.submissions.player1).toBeUndefined();

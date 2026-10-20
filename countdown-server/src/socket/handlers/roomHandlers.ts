@@ -13,7 +13,7 @@
 import type { Server, Socket } from 'socket.io';
 import { RoomManager } from '../../rooms/RoomManager';
 import { adminClient } from '../../supabase/adminClient';
-import { startNextRound } from './roundHandlers';
+import { ROUND_DURATION_MS, startNextRound } from './roundHandlers';
 import { parseMatchPayload, safeHandler } from '../validation';
 import type {
   ClientToServerEvents,
@@ -150,8 +150,15 @@ export function registerRoomHandlers(
     socket.data.matchId = matchId; // remembered for later events on this same connection (submit_answer, disconnect, etc.)
 
     // ── RECONNECT PATH ─────────────────────────────────────────────────
-    // If this player had a pending forfeit timer, they're coming back
-    // inside the grace period: cancel the timer and resync their client.
+    // A player who is already part of a match that has started is COMING BACK.
+    // That happens in two ways and both must resync the client:
+    //   - the old socket was already noticed as dead: a forfeit timer is pending
+    //     and we cancel it;
+    //   - the new socket arrives BEFORE the server noticed the old one drop
+    //     (refresh, flaky network - Socket.io can take ~45s to notice): no timer
+    //     exists, but the client still has no board and must get one.
+    // The stale socket's later 'disconnect' is ignored, because the slot now
+    // points at the new socket id.
     const returningSlot: 'player1' | 'player2' | null = isPlayer1
       ? 'player1'
       : isExistingPlayer2
@@ -162,24 +169,33 @@ export function registerRoomHandlers(
       roomManager.setSocketId(matchId, returningSlot, socket.id);
       const wasPendingForfeit = roomManager.clearDisconnectTimer(matchId, returningSlot);
 
-      if (wasPendingForfeit && room.currentRound > 0 && room.startTimestamp && room.player2Id) {
-        console.log(`[match ${matchId}] ${returningSlot} reconnected within grace period.`);
+      if (room.currentRound > 0 && room.player2Id) {
+        console.log(
+          `[match ${matchId}] ${returningSlot} reconnected ` +
+            (wasPendingForfeit ? 'within the grace period.' : 'before the old connection timed out.')
+        );
 
         // Dismiss the lobby overlay on the returning client...
         socket.emit('opponent_joined', {
           player1Id: room.player1Id,
           player2Id: room.player2Id,
         });
-        // ...and send them the round that's currently in progress.
-        socket.emit('round_start', {
-          roundNumber: room.currentRound,
-          tiles: room.currentTiles,
-          target: room.currentTarget,
-          startTimestamp: room.startTimestamp,
-          durationMs: 30_000,
-          player1TotalRaw: room.player1TotalRaw,
-          player2TotalRaw: room.player2TotalRaw,
-        });
+        // ...and, if a round is open right now, send it with the running totals.
+        // Between rounds (result showing / next round queued) there is nothing
+        // to resend: this socket has already joined the room, so the next
+        // round_start broadcast reaches it. Resending the FINISHED round would
+        // show the player an expired board.
+        if (room.roundPhase === 'active' && room.startTimestamp) {
+          socket.emit('round_start', {
+            roundNumber: room.currentRound,
+            tiles: room.currentTiles,
+            target: room.currentTarget,
+            startTimestamp: room.startTimestamp,
+            durationMs: ROUND_DURATION_MS,
+            player1TotalRaw: room.player1TotalRaw,
+            player2TotalRaw: room.player2TotalRaw,
+          });
+        }
         return;
       }
     }
@@ -209,15 +225,6 @@ export function registerRoomHandlers(
         if (room.currentRound === 0) {
           startNextRound(io, roomManager, matchId);
         }
-      } else if (room.currentRound > 0 && room.startTimestamp) {
-        // Reconnected mid-round — send active round state
-        socket.emit('round_start', {
-          roundNumber: room.currentRound,
-          tiles: room.currentTiles,
-          target: room.currentTarget,
-          startTimestamp: room.startTimestamp,
-          durationMs: 30_000,
-        });
       } else {
         socket.emit('waiting_for_opponent');
       }
@@ -236,16 +243,6 @@ export function registerRoomHandlers(
         if (room.currentRound === 0) {
           startNextRound(io, roomManager, matchId);
         }
-      } else if (room.currentRound > 0 && room.startTimestamp) {
-        socket.emit('round_start', {
-          roundNumber: room.currentRound,
-          tiles: room.currentTiles,
-          target: room.currentTarget,
-          startTimestamp: room.startTimestamp,
-          durationMs: 30_000,
-          player1TotalRaw: room.player1TotalRaw,
-          player2TotalRaw: room.player2TotalRaw,
-        });
       } else {
         socket.emit('waiting_for_opponent');
       }

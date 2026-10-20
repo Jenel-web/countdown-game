@@ -50,7 +50,7 @@ type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents, InterServerE
 const ROUND_PREP_MS = process.env.NODE_ENV === 'test' ? 0 : 5_000;
 
 /** How long players get to submit once gameplay begins (exactly 30 seconds). */
-const ROUND_DURATION_MS = 30_000;
+export const ROUND_DURATION_MS = 30_000;
 
 /** How long the RoundResultModal is displayed between rounds before the next round starts. */
 export const ROUND_RESULT_DISPLAY_MS = process.env.NODE_ENV === 'test' ? 50 : 5_000;
