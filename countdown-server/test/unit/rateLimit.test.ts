@@ -4,6 +4,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { EventEmitter } from 'events';
 import {
     clientIp,
     createIpRateLimiter,
@@ -264,37 +265,101 @@ describe('createIpRateLimiter', () => {
 });
 
 describe('createUserConnectionCap', () => {
-    function fakeIo(userIds: string[]) {
-        const map = new Map<string, any>();
-        userIds.forEach((u, i) => map.set(`s${i}`, { id: `s${i}`, data: { userId: u } }));
-        return { sockets: { sockets: map } } as any;
+    /** A handshaking socket: `conn` is the transport, the socket itself emits 'disconnect'. */
+    function fakeSocket(userId: string, readyState = 'open') {
+        const conn = Object.assign(new EventEmitter(), { readyState });
+        const socket = Object.assign(new EventEmitter(), { id: `s-${Math.random()}`, data: { userId }, conn });
+        return socket as any;
     }
-    const joining = (userId: string) => ({ id: 'new', data: { userId } }) as any;
 
-    it('admits a user under the cap', () => {
-        const next = vi.fn();
-        createUserConnectionCap(fakeIo(['a', 'a']), 3)(joining('a'), next);
-        expect(next).toHaveBeenCalledWith();
-    });
+    /** Runs the middleware; true = admitted. */
+    function admit(cap: ReturnType<typeof createUserConnectionCap>, socket: any): boolean {
+        let result: Error | undefined | 'unset' = 'unset';
+        cap.middleware(socket, (err?: Error) => (result = err));
+        return result === undefined;
+    }
 
-    it('rejects a user who already holds `max` sockets', () => {
+    it('admits up to the cap and refuses the next one with a clear error', () => {
         vi.spyOn(console, 'warn').mockImplementation(() => {});
-        const next = vi.fn();
-        createUserConnectionCap(fakeIo(['a', 'a', 'a']), 3)(joining('a'), next);
-        expect(next.mock.calls[0][0]).toBeInstanceOf(Error);
+        const cap = createUserConnectionCap(3);
+        const results = [1, 2, 3, 4].map(() => admit(cap, fakeSocket('a')));
+        expect(results).toEqual([true, true, true, false]);
+
+        const errors: Error[] = [];
+        cap.middleware(fakeSocket('a'), (e?: Error) => e && errors.push(e));
+        expect(errors[0].message).toMatch(/too many open connections/i);
     });
 
-    it('other accounts\' sockets do not count against this user', () => {
-        const next = vi.fn();
-        createUserConnectionCap(fakeIo(['b', 'b', 'b', 'b', 'c']), 3)(joining('a'), next);
-        expect(next).toHaveBeenCalledWith();
+    it('is STRICT for concurrent handshakes: none have connected yet, but only `max` are admitted', () => {
+        // The old cap counted connected sockets, so N handshakes in flight each saw 0 and all got in.
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const cap = createUserConnectionCap(5);
+        const admitted = Array.from({ length: 60 }, () => admit(cap, fakeSocket('farm'))).filter(Boolean).length;
+        expect(admitted).toBe(5);
+        expect(cap.heldBy('farm')).toBe(5);
     });
 
-    it('does not count the joining socket itself', () => {
-        const io = fakeIo(['a', 'a']);
-        io.sockets.sockets.set('new', { id: 'new', data: { userId: 'a' } });
-        const next = vi.fn();
-        createUserConnectionCap(io, 3)(joining('a'), next);
-        expect(next).toHaveBeenCalledWith();
+    it('closing the transport frees the slot', () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const cap = createUserConnectionCap(1);
+        const first = fakeSocket('a');
+        expect(admit(cap, first)).toBe(true);
+        expect(admit(cap, fakeSocket('a'))).toBe(false);
+
+        first.conn.emit('close');
+        expect(cap.heldBy('a')).toBe(0);
+        expect(admit(cap, fakeSocket('a'))).toBe(true);
+    });
+
+    it('a namespace disconnect that leaves the transport open also frees the slot', () => {
+        const cap = createUserConnectionCap(1);
+        const s = fakeSocket('a');
+        admit(cap, s);
+        s.emit('disconnect');
+        expect(cap.heldBy('a')).toBe(0);
+    });
+
+    it('releases exactly once when both disconnect AND close fire (no negative counts, no stolen slots)', () => {
+        const cap = createUserConnectionCap(3);
+        const a1 = fakeSocket('a');
+        const a2 = fakeSocket('a');
+        admit(cap, a1);
+        admit(cap, a2);
+
+        a1.emit('disconnect');
+        a1.conn.emit('close');
+        a1.conn.emit('close');
+        expect(cap.heldBy('a')).toBe(1); // a2's slot untouched
+    });
+
+    it('a handshake abandoned during auth (transport already closed) is refused and reserves nothing', () => {
+        const cap = createUserConnectionCap(1);
+        expect(admit(cap, fakeSocket('a', 'closed'))).toBe(false);
+        expect(admit(cap, fakeSocket('a', 'closing'))).toBe(false);
+        expect(cap.heldBy('a')).toBe(0);
+        expect(admit(cap, fakeSocket('a'))).toBe(true); // no slot was leaked
+    });
+
+    it('accounts are independent, and empty entries are forgotten (bounded memory)', () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const cap = createUserConnectionCap(1);
+        const b = fakeSocket('b');
+        expect(admit(cap, fakeSocket('a'))).toBe(true);
+        expect(admit(cap, b)).toBe(true);
+        expect(admit(cap, fakeSocket('a'))).toBe(false);
+        expect(cap.size()).toBe(2);
+
+        b.conn.emit('close');
+        expect(cap.size()).toBe(1);
+    });
+
+    it('churn: 1000 connect/close cycles leave nothing behind', () => {
+        const cap = createUserConnectionCap(2);
+        for (let i = 0; i < 1000; i++) {
+            const s = fakeSocket(`u${i % 7}`);
+            expect(admit(cap, s)).toBe(true);
+            s.conn.emit('close');
+        }
+        expect(cap.size()).toBe(0);
     });
 });

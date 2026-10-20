@@ -196,17 +196,66 @@ describe('connection floods', () => {
         expect((await tryConnect(srv.url, 'one-account')).ok).toBe(true);
     });
 
-    it('60 sockets from one account: at most the cap get in (the baseline accepted all 60)', async () => {
+    it('60 CONCURRENT sockets from one account: exactly the cap get in (the baseline accepted all 60)', async () => {
         vi.spyOn(console, 'warn').mockImplementation(() => {});
         const srv = await newServer({ maxSocketsPerUser: 5 });
         const attempts = await Promise.all(Array.from({ length: 60 }, () => tryConnect(srv.url, 'sock-farm')));
-        const accepted = attempts.filter((r) => r.ok).length;
-        // Concurrent handshakes can race past the check by a few; the point is "bounded", not 60.
-        expect(accepted).toBeLessThan(60);
-        expect(accepted).toBeGreaterThanOrEqual(5);
-        // Settled state: once everything has connected the account can't add more.
-        await sleep(200);
+        expect(attempts.filter((r) => r.ok)).toHaveLength(5);
+        expect(srv.heldConnections('sock-farm')).toBe(5);
         expect((await tryConnect(srv.url, 'sock-farm')).ok).toBe(false);
+    });
+
+    it('a slow auth does not let concurrent handshakes slip past the cap', async () => {
+        // The race the old cap lost: every handshake is parked in the auth await at the same time.
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const realGetUser = mockAdmin.auth.getUser.bind(mockAdmin.auth);
+        vi.spyOn(mockAdmin.auth, 'getUser').mockImplementation(async (token: string) => {
+            await sleep(150);
+            return realGetUser(token);
+        });
+        const srv = await newServer({ maxSocketsPerUser: 3 });
+        const attempts = await Promise.all(Array.from({ length: 20 }, () => tryConnect(srv.url, 'slow-auth')));
+        expect(attempts.filter((r) => r.ok)).toHaveLength(3);
+    });
+
+    it('handshakes abandoned while auth is in flight do not leak slots', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const realGetUser = mockAdmin.auth.getUser.bind(mockAdmin.auth);
+        vi.spyOn(mockAdmin.auth, 'getUser').mockImplementation(async (token: string) => {
+            await sleep(200);
+            return realGetUser(token);
+        });
+        const srv = await newServer({ maxSocketsPerUser: 2 });
+
+        // Open 6 connections and walk away from each one before auth answers.
+        for (let i = 0; i < 6; i++) {
+            const s = createTestClient(srv.url, 'quitter');
+            sockets.push(s);
+            await sleep(20);
+            s.disconnect();
+        }
+        await sleep(400); // all the parked handshakes resolve now
+        expect(srv.heldConnections('quitter')).toBe(0);
+
+        // The account can still use its full allowance.
+        const a = await tryConnect(srv.url, 'quitter');
+        const b = await tryConnect(srv.url, 'quitter');
+        expect([a.ok, b.ok]).toEqual([true, true]);
+    });
+
+    it('slots are returned when sockets close, so the account can reconnect afterwards', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const srv = await newServer({ maxSocketsPerUser: 2 });
+        const a = await tryConnect(srv.url, 'cycler');
+        const b = await tryConnect(srv.url, 'cycler');
+        expect(srv.heldConnections('cycler')).toBe(2);
+
+        a.socket.disconnect();
+        b.socket.disconnect();
+        const deadline = Date.now() + 2000;
+        while (srv.heldConnections('cycler') > 0 && Date.now() < deadline) await sleep(20);
+        expect(srv.heldConnections('cycler')).toBe(0);
+        expect((await tryConnect(srv.url, 'cycler')).ok).toBe(true);
     });
 });
 
