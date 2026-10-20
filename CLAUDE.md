@@ -239,6 +239,8 @@ Follow the existing "Countdown Kinetic" design:
 
 Use existing Tailwind tokens from `tailwind.config.ts` and existing component patterns. Do not invent new colors or introduce a new design system without approval.
 
+Countdown Kinetic overrides the personal `design-taste-frontend` skill (and any other design skill) in this project. Where the skill bans something this design uses (glass cards, pill buttons, its own dealt palettes and fonts), follow Countdown Kinetic; use the skill only for layout, hierarchy and critique within these tokens.
+
 ### Component and state organization
 
 - Keep reusable socket behavior and timer logic in the established context and hooks.
