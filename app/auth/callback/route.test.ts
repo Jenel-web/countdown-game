@@ -80,13 +80,12 @@ describe('/auth/callback GET handler', () => {
     expect(res.headers.get('location')).toMatch(/\/login\?error=/);
   });
 
-  it('redirects to /lobby and upserts profile on successful exchange', async () => {
+  it('redirects to /lobby on successful exchange and never writes a profile row', async () => {
     const fakeUser = { id: 'user-123', email: 'player@example.com' };
     mockExchangeCodeForSession.mockResolvedValueOnce({
       data: { user: fakeUser, session: {} },
       error: null,
     });
-    mockUpsert.mockResolvedValueOnce({ error: null });
     mockMaybeSingle.mockResolvedValueOnce({ data: { username: 'Player1' } });
 
     const req = makeRequest({ code: 'valid-code' });
@@ -95,30 +94,24 @@ describe('/auth/callback GET handler', () => {
     expect(res.status).toBe(307);
     expect(res.headers.get('location')).toMatch(/\/lobby$/);
 
-    // Profile upsert must have been called with the correct data and
-    // ignoreDuplicates: true so returning users' data is never overwritten
-    expect(mockUpsert).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'user-123', email: 'player@example.com' }),
-      expect.objectContaining({ onConflict: 'id', ignoreDuplicates: true })
-    );
+    // The handle_new_user trigger creates the profiles row. The browser roles
+    // may not insert profiles at all (docs/sql/2026-10-21-lockdown-c2.sql), so
+    // a write here would fail - and would let a client choose its own stats.
+    expect(mockUpsert).not.toHaveBeenCalled();
   });
 
-  it('still redirects to /lobby even when the profile upsert fails (non-fatal)', async () => {
-    const fakeUser = { id: 'user-456', email: 'other@example.com' };
+  it('a missing profile row sends the player to /choose-username instead of failing', async () => {
     mockExchangeCodeForSession.mockResolvedValueOnce({
-      data: { user: fakeUser, session: {} },
+      data: { user: { id: 'user-456', email: 'other@example.com' }, session: {} },
       error: null,
     });
-    // Simulate a profile upsert failure
-    mockUpsert.mockResolvedValueOnce({ error: { message: 'some db error' } });
-    mockMaybeSingle.mockResolvedValueOnce({ data: { username: 'Other' } });
+    mockMaybeSingle.mockResolvedValueOnce({ data: null });
 
-    const req = makeRequest({ code: 'valid-code' });
-    const res = await GET(req as any);
+    const res = await GET(makeRequest({ code: 'valid-code' }) as any);
 
-    // Sign-in still succeeds — profile sync failure is logged but not fatal
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toMatch(/\/lobby$/);
+    expect(res.headers.get('location')).toMatch(/\/choose-username$/);
+    expect(mockUpsert).not.toHaveBeenCalled();
   });
 
   it('redirects to /choose-username when the profile has no username yet', async () => {
@@ -126,7 +119,6 @@ describe('/auth/callback GET handler', () => {
       data: { user: { id: 'user-789', email: 'new@gmail.com' }, session: {} },
       error: null,
     });
-    mockUpsert.mockResolvedValueOnce({ error: null });
     mockMaybeSingle.mockResolvedValueOnce({ data: { username: null } });
 
     const res = await GET(makeRequest({ code: 'valid-code' }) as any);

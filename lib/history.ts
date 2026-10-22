@@ -44,7 +44,8 @@ export interface RoundRow {
 export interface ProfileLite {
   id: string;
   username: string | null;
-  email: string | null;
+  /** Never loaded for other players: email is private (docs/sql/2026-10-21-lockdown-c1.sql). */
+  email?: string | null;
 }
 
 export interface MatchSummary {
@@ -222,7 +223,7 @@ export async function fetchRecentMatches(
   const matchIds = rows.map((r) => r.id);
 
   const [profilesRes, roundsRes] = await Promise.all([
-    supabase.from('profiles').select('id, username, email').in('id', profileIds),
+    supabase.from('profiles').select('id, username').in('id', profileIds),
     supabase.from('rounds').select('match_id').in('match_id', matchIds),
   ]);
   if (profilesRes.error) throw profilesRes.error;

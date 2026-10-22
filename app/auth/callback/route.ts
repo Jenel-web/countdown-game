@@ -7,8 +7,8 @@ import { createClient } from '@/lib/supabase/server';
  * Supabase redirects here after the Google OAuth consent screen.
  * This route handler:
  *   1. Exchanges the one-time `code` for a Supabase session (sets cookies).
- *   2. Ensures a `profiles` row exists for the newly authenticated user
- *      without overwriting any existing MMR / win-loss / match-history data.
+ *   2. Reads the player's username. (The `profiles` row itself is created by
+ *      the database trigger handle_new_user when the account is created.)
  *   3. Redirects the user to /choose-username if their profile has no
  *      username yet, otherwise to /lobby. On failure, back to /login with an
  *      error message.
@@ -16,8 +16,7 @@ import { createClient } from '@/lib/supabase/server';
  * Security notes:
  *   - The `code` param is a one-time, short-lived value issued by Supabase.
  *   - We never expose the service-role key here; the browser anon key is
- *     sufficient because RLS policies on `profiles` allow a user to upsert
- *     their own row.
+ *     enough because this route only reads the player's own username.
  *   - `error` / `error_description` are logged server-side only; the client
  *     receives only a generic redirect to avoid leaking OAuth internals.
  */
@@ -57,30 +56,9 @@ export async function GET(request: NextRequest) {
 
   const user = sessionData.user;
 
-  // Ensure a profiles row exists for the user.
-  // `upsert` with `ignoreDuplicates: true` (equivalent to ON CONFLICT DO NOTHING)
-  // guarantees we never overwrite MMR, wins, losses, or match history for a
-  // returning user — only a brand-new row is inserted.
-  const { error: profileError } = await supabase
-    .from('profiles')
-    .upsert(
-      {
-        id: user.id,
-        // Use the Google-provided email. For returning users this column value
-        // is already correct, so re-sending it is harmless.
-        email: user.email ?? null,
-      },
-      {
-        onConflict: 'id',
-        ignoreDuplicates: true, // never touch existing rows
-      }
-    );
-
-  if (profileError) {
-    // A profile sync failure is non-fatal for sign-in, but we log it so it
-    // shows up in server logs / Supabase log drain.
-    console.warn('[auth/callback] Profile upsert warning:', profileError.message);
-  }
+  // The profiles row is created by the database trigger handle_new_user when
+  // the account is created, so nothing is written here. The browser roles are
+  // not allowed to insert profile rows (docs/sql/2026-10-21-lockdown-c2.sql).
 
   // First-time (or not-yet-named) players must pick a username before playing.
   const { data: profileRow } = await supabase

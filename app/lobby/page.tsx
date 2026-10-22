@@ -61,7 +61,7 @@ export default function LobbyPage() {
         // 2. Query matching profile row from database
         const { data, error: dbError } = await supabase
           .from("profiles")
-          .select("id, email, username, wins, losses, mmr")
+          .select("id, username, wins, losses, mmr") // never `email`: it is private (see docs/sql/2026-10-21-lockdown-c1.sql)
           .eq("id", user.id)
           .maybeSingle();
 
@@ -72,7 +72,7 @@ export default function LobbyPage() {
         if (isMounted) {
           setProfile({
             id: user.id,
-            email: data?.email || user.email || "Operative",
+            email: user.email || "Operative", // own email comes from the login session, not the profiles table
             username: data?.username ?? null,
             wins: data?.wins ?? 0,
             losses: data?.losses ?? 0,

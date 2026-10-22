@@ -380,15 +380,17 @@ function MatchBoard({ matchId }: { matchId: string }) {
         }
       }
 
-      // Fetch profile for the HUD
+      // Fetch profile for the HUD. Never select `email` from profiles: it is
+      // private to its owner (docs/sql/2026-10-21-lockdown-c1.sql). Your own
+      // email comes from the login session instead.
       const { data } = await supabase
         .from('profiles')
-        .select('email, username, wins, losses, mmr')
+        .select('username, wins, losses, mmr')
         .eq('id', user.id)
         .maybeSingle();
 
       if (data) {
-        const profile = { email: data.email ?? user.email ?? null, username: data.username ?? null, wins: data.wins ?? 0, losses: data.losses ?? 0, mmr: data.mmr ?? 1000 };
+        const profile = { email: user.email ?? null, username: data.username ?? null, wins: data.wins ?? 0, losses: data.losses ?? 0, mmr: data.mmr ?? 1000 };
         setMyProfile(profile);
         myPrevMmrRef.current = profile.mmr;
       }
@@ -416,11 +418,11 @@ function MatchBoard({ matchId }: { matchId: string }) {
     const supabase = createClient();
     supabase
       .from('profiles')
-      .select('email, username, wins, losses, mmr')
+      .select('username, wins, losses, mmr') // an opponent's email is never fetched
       .eq('id', opponentId)
       .maybeSingle()
       .then(({ data }) => {
-        if (data) setOpponentProfile({ email: data.email ?? null, username: data.username ?? null, wins: data.wins ?? 0, losses: data.losses ?? 0, mmr: data.mmr ?? 1000 });
+        if (data) setOpponentProfile({ email: null, username: data.username ?? null, wins: data.wins ?? 0, losses: data.losses ?? 0, mmr: data.mmr ?? 1000 });
       });
   }, [opponentId]);
 
@@ -804,7 +806,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
       if (user) {
         const { data } = await supabase
           .from('profiles')
-          .select('email, username, wins, losses, mmr')
+          .select('username, wins, losses, mmr')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -814,7 +816,7 @@ function MatchBoard({ matchId }: { matchId: string }) {
 
         if (data) {
           const newProfile = {
-            email: data.email ?? null,
+            email: user.email ?? null,
             username: data.username ?? null,
             wins: data.wins ?? 0,
             losses: data.losses ?? 0,

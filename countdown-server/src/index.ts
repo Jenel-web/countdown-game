@@ -32,6 +32,8 @@ import { registerRoomHandlers } from './socket/handlers/roomHandlers';
 import { registerRoundHandlers } from './socket/handlers/roundHandlers';
 import { registerRematchHandlers } from './socket/handlers/rematchHandlers';
 import { RoomManager } from './rooms/RoomManager';
+import { adminClient } from './supabase/adminClient';
+import { startStaleMatchSweeper } from './maintenance/staleMatchSweeper';
 import type {
   ClientToServerEvents,
   ServerToClientEvents,
@@ -101,6 +103,14 @@ io.use(authMiddleware);
 io.use(createUserConnectionCap().middleware);
 
 const roomManager = new RoomManager();
+
+// Deletes challenges nobody joined within 30 minutes (every 5 minutes, and once
+// at start-up). Rooms live on this server are passed along and never deleted.
+const staleMatchSweeper = startStaleMatchSweeper({
+  rpc: (fn, args) => adminClient.rpc(fn, args),
+  liveMatchIds: () => roomManager.listMatchIds(),
+});
+void staleMatchSweeper.sweep();
 
 io.on('connection', (socket) => {
   console.log(`[connect] socket ${socket.id} authenticated as user ${socket.data.userId}`);

@@ -261,6 +261,11 @@ export class RoomManager {
     return null;
   }
 
+  /** Ids of every room currently held in memory (used by the stale-match sweeper). */
+  listMatchIds(): string[] {
+    return [...this.rooms.keys()];
+  }
+
   removeRoom(matchId: string): void {
     const room = this.rooms.get(matchId);
     if (room?.roundTimer) clearTimeout(room.roundTimer);
