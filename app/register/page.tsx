@@ -7,6 +7,7 @@ import { useState } from 'react';
 import Navbar from '@/components/Navbar';
 import GoogleOAuthButton from '@/components/GoogleOAuthButton';
 import { usernameToEmail, validateUsername } from '@/lib/auth/username';
+import { claimUsername } from '@/lib/auth/claimUsername';
 import { PASSWORD_RULES, isPasswordValid, passedRuleCount } from '@/lib/auth/password';
 
 const supabase = createClient();
@@ -83,14 +84,19 @@ export default function RegisterPage() {
       return;
     }
 
-    // Safely upsert matching profile row to avoid profiles_pkey duplicate key violations when triggers exist
+    // The profiles row is created by the database (handle_new_user) when the
+    // account is. The browser may only set its username, once: every other
+    // profile column is written by the game server alone
+    // (docs/sql/2026-10-21-lockdown-c2.sql).
     if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert({ id: data.user.id, email: email, username: username.trim() }, { onConflict: 'id' });
-
-      if (profileError && profileError.code !== '23505' && !profileError.message?.includes('profiles_pkey')) {
-        console.warn('Profile sync warning:', profileError.message);
+      const claim = await claimUsername(supabase, data.user.id, username);
+      if (!claim.ok) {
+        // The account exists but the name did not stick (e.g. someone took it a
+        // moment ago). The middleware sends them to /choose-username after login.
+        setLoading(false);
+        setSuccess(`Account created, but ${claim.error.replace(/\.$/, '').toLowerCase()}. You can pick a username after logging in.`);
+        setTimeout(() => router.push('/login?registered=true'), 2600);
+        return;
       }
     }
 
