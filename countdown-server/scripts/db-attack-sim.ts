@@ -57,6 +57,40 @@ export interface CheckResult {
 }
 
 /**
+ * Cleans a value pasted from a terminal or browser: trims whitespace and line
+ * breaks (a token pasted across two lines otherwise ends with a newline, which
+ * is an invalid HTTP header) and strips one pair of wrapping quotes. Returns
+ * undefined for empty input.
+ */
+export function cleanSecret(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  const trimmed = raw.trim().replace(/^(['"])([\s\S]*)\1$/, '$2').trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
+/**
+ * Reads the email and expiry out of a login token WITHOUT verifying it (the
+ * payload is only base64), so errors can name the account and say "expired"
+ * instead of a vague "invalid". Never trust the result for anything else.
+ */
+export function describeToken(
+  token: string,
+  nowMs: number = Date.now()
+): { email?: string; expiresAt?: Date; expired: boolean } {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8'));
+    const expiresAt = typeof payload.exp === 'number' ? new Date(payload.exp * 1000) : undefined;
+    return {
+      email: typeof payload.email === 'string' ? payload.email : undefined,
+      expiresAt,
+      expired: expiresAt ? expiresAt.getTime() <= nowMs : false,
+    };
+  } catch {
+    return { expired: false };
+  }
+}
+
+/**
  * Refuses keys that bypass Row Level Security. A legacy JWT key carries its role
  * in the payload; the newer keys carry it in the prefix (sb_secret_ vs
  * sb_publishable_).
@@ -129,12 +163,33 @@ export async function runDbAttacks(opts: {
   const A = clientFor(opts.url, opts.anonKey, opts.tokenA);
   const B = clientFor(opts.url, opts.anonKey, opts.tokenB);
 
+  // Say WHICH token is wrong and why, before spending a network call on it.
+  for (const [label, token] of [['TOKEN_A', opts.tokenA], ['TOKEN_B', opts.tokenB]] as const) {
+    const d = describeToken(token);
+    if (d.expired && d.expiresAt) {
+      throw new Error(
+        `${label} expired at ${d.expiresAt.toISOString()} (${d.email ?? 'unknown account'}). ` +
+          'Login tokens last about an hour: log in again and copy a fresh one.'
+      );
+    }
+  }
   const ua = await A.auth.getUser(opts.tokenA);
+  if (!ua.data.user) throw new Error(`TOKEN_A was rejected by Supabase: ${ua.error?.message ?? 'no user returned'}`);
   const ub = await B.auth.getUser(opts.tokenB);
-  if (!ua.data.user || !ub.data.user) throw new Error('TOKEN_A or TOKEN_B is not a valid, unexpired login token.');
+  if (!ub.data.user) throw new Error(`TOKEN_B was rejected by Supabase: ${ub.error?.message ?? 'no user returned'}`);
   const idA = ua.data.user.id;
   const idB = ub.data.user.id;
-  if (idA === idB) throw new Error('TOKEN_A and TOKEN_B belong to the same account. Use two different throwaway accounts.');
+  const emailA = ua.data.user.email ?? idA;
+  const emailB = ub.data.user.email ?? idB;
+  log(`Account A: ${emailA}
+Account B: ${emailB}
+`);
+  if (idA === idB) {
+    throw new Error(
+      `TOKEN_A and TOKEN_B are both for ${emailA}. Log in as a DIFFERENT account for the second token ` +
+        '(use an incognito window so the two logins do not share a session).'
+    );
+  }
 
   const results: CheckResult[] = [];
   const created = new Set<string>();
@@ -332,10 +387,10 @@ export async function runDbAttacks(opts: {
 }
 
 async function main() {
-  const url = process.env.SUPABASE_URL;
-  const anonKey = process.env.SUPABASE_ANON_KEY;
-  const tokenA = process.env.TOKEN_A;
-  const tokenB = process.env.TOKEN_B;
+  const url = cleanSecret(process.env.SUPABASE_URL);
+  const anonKey = cleanSecret(process.env.SUPABASE_ANON_KEY);
+  const tokenA = cleanSecret(process.env.TOKEN_A);
+  const tokenB = cleanSecret(process.env.TOKEN_B);
   if (!url || !anonKey || !tokenA || !tokenB) {
     console.error('Set SUPABASE_URL, SUPABASE_ANON_KEY, TOKEN_A and TOKEN_B (see the top of this file).');
     process.exit(2);
