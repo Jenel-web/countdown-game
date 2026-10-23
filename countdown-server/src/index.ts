@@ -33,6 +33,7 @@ import { registerRoundHandlers } from './socket/handlers/roundHandlers';
 import { registerRematchHandlers } from './socket/handlers/rematchHandlers';
 import { RoomManager } from './rooms/RoomManager';
 import { adminClient } from './supabase/adminClient';
+import { ConfigError, loadServerConfig } from './config';
 import { startStaleMatchSweeper } from './maintenance/staleMatchSweeper';
 import type {
   ClientToServerEvents,
@@ -51,10 +52,26 @@ process.on('uncaughtException', (err) => {
   console.error('[process] uncaughtException:', err);
 });
 
-const PORT = process.env.PORT || 4000;
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'http://localhost:3000';
+// Check the settings first: a bad deploy should stop here with a clear message,
+// not run half-broken (see src/config.ts for what is checked and why).
+let serverConfig: ReturnType<typeof loadServerConfig>['config'];
+try {
+  const loaded = loadServerConfig(process.env);
+  serverConfig = loaded.config;
+  for (const warning of loaded.warnings) console.warn(`[config] ${warning}`);
+} catch (err) {
+  if (err instanceof ConfigError) {
+    console.error(`[config] ${err.message}`);
+    process.exit(1);
+  }
+  throw err;
+}
+const PORT = serverConfig.port;
+const ALLOWED_ORIGINS = serverConfig.allowedOrigins;
 
 const app = express();
+// Do not advertise the framework in every response.
+app.disable('x-powered-by');
 const httpServer = createServer(app);
 
 // A tiny plain HTTP route, useful for a quick "is the server even up"
@@ -85,7 +102,7 @@ const io = new Server<
     // differently from normal Express routes). This is the setting that
     // actually matters for allowing your deployed Vercel frontend to
     // connect to this server.
-    origin: ALLOWED_ORIGIN,
+    origin: ALLOWED_ORIGINS,
     credentials: true,
   },
 });
@@ -97,7 +114,7 @@ const io = new Server<
 // attempts is turned away without ever costing a Supabase auth call.
 // Set TRUST_PROXY=true only when deployed behind exactly one reverse proxy
 // (Render/Railway/Fly), otherwise every player shares the proxy's address.
-const ipLimiter = createIpRateLimiter({ trustProxy: process.env.TRUST_PROXY === 'true' });
+const ipLimiter = createIpRateLimiter({ trustProxy: serverConfig.trustProxy });
 io.use(ipLimiter.middleware);
 io.use(authMiddleware);
 io.use(createUserConnectionCap().middleware);
@@ -129,5 +146,5 @@ io.on('connection', (socket) => {
 
 httpServer.listen(PORT, () => {
   console.log(`countdown-server listening on port ${PORT}`);
-  console.log(`Accepting connections from origin: ${ALLOWED_ORIGIN}`);
+  console.log(`Accepting connections from origin(s): ${ALLOWED_ORIGINS.join(', ')}`);
 });
