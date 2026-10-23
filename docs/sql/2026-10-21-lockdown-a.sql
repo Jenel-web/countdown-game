@@ -205,6 +205,11 @@ create trigger profiles_username_rules
   for each row execute function public.enforce_username_rules();
 
 
+-- Tell the API layer (PostgREST) to reload its schema now, so the new
+-- delete_stale_pending_matches() function is callable straight away instead of
+-- failing with "not found in the schema cache". Delivered when this commits.
+notify pgrst, 'reload schema';
+
 commit;
 
 
