@@ -46,7 +46,7 @@ Verify deployment targets, package versions, routes, and architectural details a
 - `lib/auth/`: Username validation (`username.ts`), username claiming (`claimUsername.ts`), and password rules.
 - `lib/history.ts`: Data shaping for the History tab.
 - `lib/supabase/client.ts` and `lib/supabase/server.ts`: Browser and server Supabase clients. The web application must use the anon/publishable key, not the service-role key.
-- `middleware.ts`: Guards protected routes, currently including `/lobby`, `/game`, `/training`, and `/history`. It also redirects authenticated users without a username to `/choose-username`.
+- `middleware.ts`: Guards protected routes, currently including `/lobby`, `/game`, `/training`, `/history`, and `/match` (the list lives in `lib/auth/protectedPaths.ts`). It also redirects authenticated users without a username to `/choose-username`.
 
 ### Game server
 

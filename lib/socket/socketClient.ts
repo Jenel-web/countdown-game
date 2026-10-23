@@ -22,6 +22,7 @@
  */
 
 import { io, Socket } from 'socket.io-client';
+import { resolveSocketUrl } from './socketUrl';
 import type {
   ServerToClientEvents,
   ClientToServerEvents,
@@ -56,8 +57,9 @@ export function getSocket(token?: string): AppSocket {
     );
   }
 
-  const serverUrl =
-    process.env.NEXT_PUBLIC_SOCKET_URL ?? 'http://localhost:4000';
+  // The property access must stay literal: Next.js replaces it with the real
+  // value when the site is built.
+  const serverUrl = resolveSocketUrl(process.env.NEXT_PUBLIC_SOCKET_URL, process.env.NODE_ENV);
 
   _socket = io(serverUrl, {
     // Pass the Supabase JWT in the handshake so authMiddleware can verify
