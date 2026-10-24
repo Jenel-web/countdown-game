@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Swords, Dumbbell, Trophy, Clock, LogIn, UserPlus, Zap, LogOut } from 'lucide-react';
+import { Swords, Dumbbell, Trophy, Clock, LogIn, UserPlus, LogOut } from 'lucide-react';
+import Logo from '@/components/Logo';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
@@ -84,10 +85,8 @@ export default function Navbar() {
 
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 group">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-container shadow-glow-green transition-all group-hover:shadow-glow-green">
-              <Zap className="h-4 w-4 text-on-primary" strokeWidth={2.5} />
-            </div>
-            <span className="font-inter font-bold text-base tracking-tight text-on-surface">
+            <Logo size={36} className="transition-transform group-hover:scale-105" />
+            <span className="font-inter font-bold text-base tracking-tight text-on-surface hidden min-[380px]:inline">
               Countdown<span className="text-primary ml-0.5">Arena</span>
             </span>
           </Link>

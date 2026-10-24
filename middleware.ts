@@ -52,5 +52,7 @@ export default async function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+    // Static images (the logo, the tab icon) skip middleware: they need no login
+    // and should not cost a Supabase auth lookup each.
+    matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
 };

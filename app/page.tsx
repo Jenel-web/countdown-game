@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
+import Logo from '@/components/Logo';
 import { Swords, Timer, Brain, Trophy, Zap, ArrowRight } from 'lucide-react';
 
 const features = [
@@ -15,6 +16,8 @@ export default function LandingPage() {
 
       {/* Hero */}
       <main className="flex-1 flex flex-col items-center justify-center text-center px-6 py-24 gap-8">
+        <Logo size={96} alt="Countdown Arena" className="h-20 w-20 sm:h-24 sm:w-24 drop-shadow-[0_0_28px_rgba(0,229,255,0.22)]" />
+
         {/* Badge */}
         <div className="inline-flex items-center gap-2 rounded-pill border border-primary/30 bg-surface-container px-4 py-1.5 text-sm font-mono text-primary">
           <Zap className="h-3.5 w-3.5" />

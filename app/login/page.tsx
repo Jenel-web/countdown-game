@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
+import Logo from '@/components/Logo';
 import { createClient } from '@/lib/supabase/client';
 import GoogleOAuthButton from '@/components/GoogleOAuthButton';
 import { loginIdentifierToEmail } from '@/lib/auth/username';
@@ -50,9 +51,7 @@ function LoginForm() {
       {/* Header Section */}
       <header className="text-center flex flex-col gap-2 items-center">
         {/* Brand Mark */}
-        <div className="w-12 h-12 rounded-lg bg-surface flex items-center justify-center border border-primary-container/30 mb-2 shadow-[0_0_15px_rgba(0,229,255,0.1)]">
-          <span className="material-symbols-outlined text-primary-container text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>calculate</span>
-        </div>
+        <Logo size={72} className="mb-2 drop-shadow-[0_0_18px_rgba(0,229,255,0.25)]" />
         <h1 className="font-headline-xl text-headline-xl font-black tracking-tighter text-primary-container">COUNTDOWN</h1>
         <div className="flex items-center gap-2 text-on-surface-variant font-label-caps text-label-caps uppercase tracking-[0.2em]">
           <span className="w-2 h-2 rounded-full bg-primary-container animate-pulse shadow-[0_0_8px_rgba(0,229,255,0.8)]"></span>
