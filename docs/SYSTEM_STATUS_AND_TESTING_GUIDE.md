@@ -1,6 +1,6 @@
 ﻿# Countdown Game - System Status and QA Testing Guide
 
-Audit date: 2026-10-03
+Audit date: 2026-10-03. Status sections 1.1 to 1.3 and 4.4 re-checked against the code on 2026-10-24; the QA workflows in section 2 and the event diagram in section 5 were not re-verified and may still describe older behavior.
 Scope: lib/socket/, context/GameSocketContext.tsx, hooks/useGameSocket.ts, hooks/useRoundTimer.ts, app/game/page.tsx, app/lobby/page.tsx, components/{ErrorModal,WaitingLobby,ReconnectBanner,OpponentStatusBadge}.tsx, countdown-server/src/socket/handlers/{roomHandlers,roundHandlers}.ts, countdown-server/src/index.ts
 
 ---
@@ -45,8 +45,9 @@ Submit -> closestValue -> toast notification | app/game/page.tsx | IMPLEMENTED
 Auth guard (redirect to /login if no Supabase user) | app/game/page.tsx | IMPLEMENTED
 Solvability check computed on tile generation | app/game/page.tsx | COMPUTED - not surfaced in UI
 Lobby (/lobby) - profile stats (wins/losses/MMR) from Supabase | app/lobby/page.tsx | IMPLEMENTED
-Create Challenge Link button | app/lobby/page.tsx | STUB - random ID only, NOT persisted to DB
+Create Challenge Link button | app/lobby/page.tsx | IMPLEMENTED - inserts a real `matches` row (status pending) and routes to /match/[matchId]
 Quick Match button | app/lobby/page.tsx | STUB - routes to /game (solo only), no real matchmaking
+Multiplayer match page (/match/[matchId]) | app/match/[matchId]/page.tsx | IMPLEMENTED - uses RoundResultModal and GameOverModal
 
 #### Client - UI Components
 
@@ -60,8 +61,8 @@ ReconnectBanner - full-page lockout overlay (pointer-events-auto) | Spec section
 ReconnectBanner - section 4.3 reconnect-failed modal upgrade | Spec section 4.3 | IMPLEMENTED
 OpponentStatusBadge - thinking (grey dot) / submitted (cyan ping) | Spec section 6.1 | IMPLEMENTED
 OpponentScoreHeader - label + totalRaw/100 score + badge | Spec section 5.1 + 6.1 | IMPLEMENTED
-GameOverModal - full match summary with MMR delta, round history | Spec section 5.x | COMPONENT READY - not integrated
-RoundResultModal | Spec section 5.x | COMPONENT READY - not integrated
+GameOverModal - full match summary with MMR delta, round history | Spec section 5.x | IMPLEMENTED - used by the match page
+RoundResultModal | Spec section 5.x | IMPLEMENTED - used by the match page
 
 #### Server (countdown-server)
 
@@ -77,7 +78,7 @@ opponent_joined broadcast when player2 joins | roomHandlers.ts | IMPLEMENTED
 Match activated in Supabase (status active, player2_id) on join | roomHandlers.ts | IMPLEMENTED
 Round started immediately when both players present | roomHandlers.ts | IMPLEMENTED
 error emitted for: not_found, match_finished, room_full | roomHandlers.ts | IMPLEMENTED
-Disconnect = immediate forfeit; opponent_left broadcast; finish_match RPC called | roomHandlers.ts | IMPLEMENTED
+Disconnect = 15 s reconnect grace, then forfeit; opponent_left broadcast; finish_match RPC called | roomHandlers.ts | IMPLEMENTED
 startNextRound() - tile/target gen, solvability, round_start broadcast, 30s timer | roundHandlers.ts | IMPLEMENTED
 submit_answer - server-side replay validation (never trusts client resultValue) | roundHandlers.ts | IMPLEMENTED
 evaluateRound() - scoring, round DB insert, round_result broadcast | roundHandlers.ts | IMPLEMENTED
@@ -93,9 +94,9 @@ not_in_room, no_active_round, not_a_player error codes | roundHandlers.ts | IMPL
 
 1. Register / Login (/login, /register) - Supabase email auth. Next.js middleware enforces auth on /lobby, /game, /training; unauthenticated users are redirected to /login.
 
-2. Lobby (/lobby) - Profile card shows wins, losses, and MMR pulled live from the profiles Supabase table. A Large Numbers stepper (0-4) is interactive but not wired to anything functional. Two CTAs exist:
-   - Quick Match: navigates to /game (solo mode only).
-   - Create Challenge Link: generates a 5-char random ID locally, shows a copy-link field, but the ID is NOT written to the database and cannot start a real multiplayer match.
+2. Lobby (/lobby) - Profile card shows wins, losses, and MMR pulled live from the profiles Supabase table. A Large Numbers stepper (0-4) applies to solo practice only; multiplayer rounds pick a random tile pool. Two CTAs exist:
+   - Quick Match: navigates to /game (solo mode only). There is no matchmaking queue.
+   - Create Challenge Link: inserts a real `matches` row (status pending), shows a copy-link field, and sends the creator to /match/[matchId]. The opponent opens the link and joins.
 
 3. Solo Game (/game) - Fully functional standalone puzzle:
    - Choose 0-4 large tiles (or random) in the SELECTING modal.
@@ -107,26 +108,23 @@ not_in_room, no_active_round, not_a_player error codes | roundHandlers.ts | IMPL
    - Exact match shows a success toast; Submit or timer expiry shows closest result.
    - Play Again restarts the entire flow.
 
-4. Multiplayer Match (/match/[matchId]) - ROUTE DOES NOT EXIST.
-   The app/match/ directory is absent. All multiplayer infrastructure (socket context, hooks, server handlers, overlay components) is fully built and waiting but has not been assembled into a working page.
+4. Multiplayer Match (/match/[matchId]) - IMPLEMENTED (app/match/[matchId]/page.tsx). Both players join through a challenge link, play rounds to 5.00 points, and see round and game-over modals. Match results are written only by the server through the finish_match RPC.
 
 ---
 
 ### 1.3 Pending / Not Yet Implemented Items
 
 Gap | Severity | Detail
-/match/[matchId] page does not exist | CRITICAL | app/match/ directory is absent. Socket hooks, overlays, and server handlers are ready but unassembled.
-Multiplayer match creation is a stub | CRITICAL | lobby/page.tsx handleCreateChallenge() uses Math.random() and never writes to Supabase. No real match row created.
-Quick Match routes to solo mode | CRITICAL | handleQuickMatch() calls router.push('/game'). No matchmaking queue exists.
-Server .env is completely empty | CRITICAL | countdown-server/.env has no content. SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL, ALLOWED_ORIGIN, PORT must all be set.
-NEXT_PUBLIC_SOCKET_URL missing from .env.local | CRITICAL | socketClient.ts falls back to http://localhost:4000. Without this var, production deployments fail silently.
-/match route not in middleware PROTECTED_PATHS | MEDIUM | middleware.ts does not protect /match. When added, unauthenticated users could load the page with no token.
-Reconnect mid-round restores no state | MEDIUM | roomHandlers.ts line 89 explicitly marks this out-of-scope. Reconnecting player sees no current tiles; must wait for next round.
-Large-number lobby preference not threaded to multiplayer | MEDIUM | roundHandlers.ts line 53 hardcodes 'random' for tile pool generation.
-Solvability result not shown in UI | LOW | solveInfo state is computed and stored but no component renders it.
+Quick Match routes to solo mode | MEDIUM | handleQuickMatch() calls router.push('/game'). No matchmaking queue exists; multiplayer is by challenge link only.
+Large-number lobby preference not threaded to multiplayer | MEDIUM | roundHandlers.ts uses generateTilePool('random') every round. Deliberate MVP simplification (see the note in that file).
+Server and web env vars must be set on the hosts | DEPLOY | Local .env files are never deployed. Set the variables listed in section 4.4 in the Render/Railway/Fly and Vercel dashboards. Missing ones stop the server (ALLOWED_ORIGIN) or fail the Vercel build on purpose.
+Single server instance only | DEPLOY | Room state is in memory (RoomManager). Run exactly one instance; a restart or free-tier sleep ends live matches.
+Items listed under "Not done yet" in docs/DEPLOYMENT_CHECKLIST.md | MEDIUM | CAPTCHA, password reset, account deletion, graceful shutdown, finish_match retry, monitoring, CI, Next.js 15.
+Solvability result not shown in UI | LOW | solveInfo state in app/game/page.tsx is computed and stored but no component renders it.
 Solo game results not persisted | LOW | Solo mode is client-side only. Wins/losses/MMR are not updated after solo games.
 Profile avatar is a hardcoded placeholder URL | LOW | lobby/page.tsx uses a static Google image URL for all users.
-GameOverModal and RoundResultModal not integrated | LOW | Both components are fully built but not wired into any page.
+
+Resolved since the original audit (verified in code 2026-10-24): /match/[matchId] page exists and /match is in PROTECTED_PATHS; challenge links create a real matches row; reconnecting players are resynced (15 s grace before forfeit); GameOverModal and RoundResultModal are used by the match page; NEXT_PUBLIC_SOCKET_URL and the server variables are documented in the .env.example files and checked at start-up/build time.
 
 ---
 
@@ -501,8 +499,10 @@ RED-FLAG FRAMES (investigate immediately):
 ### 4.3 Common Root Causes
 
 PROBLEM: Socket never connects (no WS frames in DevTools)
-  1. countdown-server/.env is empty - SUPABASE_SERVICE_ROLE_KEY required for authMiddleware;
-     without it every handshake is rejected before any game event can fire.
+  1. The server's environment is incomplete - SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are
+     required for authMiddleware; without them every handshake is rejected before any game
+     event can fire. Locally that is countdown-server/.env; deployed it is the host's
+     environment settings.
   2. NEXT_PUBLIC_SOCKET_URL missing - socketClient.ts defaults to http://localhost:4000; if the
      server is on a different host/port, the connection silently fails.
   3. CORS mismatch - ALLOWED_ORIGIN in server .env must exactly match the client origin string
@@ -542,22 +542,26 @@ PROBLEM: Server throws on finish_match (second call on an already-finished match
 
 ### 4.4 Required Environment Variables Checklist
 
-CLIENT (Countdown Game/.env.local):
-  Variable                        | Current Status | Required For
-  NEXT_PUBLIC_SUPABASE_URL        | SET            | All Supabase client calls
-  NEXT_PUBLIC_SUPABASE_ANON_KEY   | SET            | Auth, DB reads
-  NEXT_PUBLIC_SOCKET_URL          | MISSING        | Socket connection in any non-localhost environment
+Local development uses .env.local (web) and countdown-server/.env (server), copied from the
+.env.example files. Both are git-ignored and must never be committed. In production the same
+variables are set in the host dashboards (Vercel; Render/Railway/Fly), not in files.
 
-SERVER (countdown-server/.env):
-  Variable                        | Current Status | Required For
-  SUPABASE_URL                    | MISSING        | adminClient initialisation
-  SUPABASE_SERVICE_ROLE_KEY       | MISSING        | authMiddleware JWT verification; all server-side DB writes
-  ALLOWED_ORIGIN                  | MISSING        | CORS (defaults to http://localhost:3000)
-  PORT                            | MISSING        | Server listen port (defaults to 4000)
+WEB (Vercel):
+  Variable                        | Production value                  | Required For
+  NEXT_PUBLIC_SUPABASE_URL        | https project address             | All Supabase client calls (build fails if missing)
+  NEXT_PUBLIC_SUPABASE_ANON_KEY   | anon/publishable key ONLY         | Auth, DB reads (build fails if it is a service role key)
+  NEXT_PUBLIC_SOCKET_URL          | game server https address         | Socket connection (build fails if missing on Vercel)
+  CSP_ENFORCE                     | optional, true after staging      | Enforce the strict Content-Security-Policy
 
-WARNING: The server .env file is completely empty. The countdown-server cannot authenticate
-any player without SUPABASE_SERVICE_ROLE_KEY and SUPABASE_URL. Every socket connection will
-be rejected at the authMiddleware stage before any game event can be processed.
+SERVER (Render / Railway / Fly):
+  Variable                        | Production value                  | Required For
+  SUPABASE_URL                    | https project address             | adminClient initialisation
+  SUPABASE_SERVICE_ROLE_KEY       | service role key (server only)    | authMiddleware JWT verification; finish_match RPC
+  ALLOWED_ORIGIN                  | exact https site origin, not "*"  | CORS; the server refuses to start without it in production
+  TRUST_PROXY                     | true                              | Per-player rate limits behind the host's proxy
+  PORT                            | leave unset                       | Host sets it; defaults to 4000 locally
+
+See docs/DEPLOYMENT_CHECKLIST.md for the deploy order and the staging smoke test.
 
 ---
 
