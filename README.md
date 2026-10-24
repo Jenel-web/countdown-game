@@ -259,9 +259,11 @@ The game server reads and writes the following in Supabase:
 
 The two services deploy independently:
 
-- **Frontend:** [Vercel](https://vercel.com). Set the three `NEXT_PUBLIC_*` variables.
-- **Game server:** any host that supports long-lived WebSocket connections (Render, Railway, Fly.io). Build with `npm run build`, start with `npm start`, and set `ALLOWED_ORIGIN` to your deployed frontend origin so CORS only admits your app.
+- **Frontend:** [Vercel](https://vercel.com). Set the three `NEXT_PUBLIC_*` variables in the project settings. The build fails on purpose if one is missing or if a service role key is in a public variable.
+- **Game server:** any host that supports long-lived WebSocket connections (Render, Railway, Fly.io). Build with `npm run build`, start with `npm start`, and set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ALLOWED_ORIGIN` (your exact https frontend origin, never `*`) and `TRUST_PROXY=true` in the host's environment settings. Run a single instance: match state is held in memory.
 - **Health checks:** point your host at `/health`.
+- **Secrets:** real `.env` files are git-ignored and are never deployed. Only the placeholder `.env.example` files are tracked. In production, set variables in the host dashboards.
+- **Order and smoke test:** follow [docs/DEPLOYMENT_CHECKLIST.md](docs/DEPLOYMENT_CHECKLIST.md): database SQL, game server, then web app.
 
 > Persistent WebSockets can't run inside Next.js API routes or serverless functions, which is why the game server is a separate service.
 
